@@ -1,10 +1,10 @@
-# 🚀 UNIFIED
+#  UNIFIED
 
 Unified is a scalable, role-based community management system built using the **MERN stack (MongoDB, Express, React, Node.js)**.  
 It allows users to create communities, manage memberships, post content, organize events, and administer platform-wide operations securely.
 
 ---
-## 📖 Project Overview
+##  Project Overview
 
 Unified is designed as a **community-driven platform** where:
 
@@ -17,14 +17,14 @@ Unified is designed as a **community-driven platform** where:
 - **Super Admin** manages the entire platform.
 
 The system emphasizes:
-- 🔐 **Security**: JWT-based protection and hashed passwords.
-- 📦 **Modular architecture**: Easy to maintain and scale.
-- 🧩 **Scalable backend**: Controller-Service pattern for clean logic.
-- 🧠 **Clean separation**: Strict decoupling of Frontend and Backend.
+-  **Security**: JWT-based protection and hashed passwords.
+-  **Modular architecture**: Easy to maintain and scale.
+-  **Scalable backend**: Controller-Service pattern for clean logic.
+-  **Clean separation**: Strict decoupling of Frontend and Backend.
 
 ---
 
-## 🏗 Architecture
+##  Architecture
 
 The application follows a standard decoupled architecture:
 
@@ -71,36 +71,36 @@ The application follows a standard decoupled architecture:
 
 ---
 
-## ✨ Core Features
+##  Core Features
 
-### 🔐 Authentication
+###  Authentication
 - Secure user registration and login.
 - JWT-based authentication with protected frontend and backend routes.
 - Role-based authorization (RBAC) to restrict sensitive actions.
 
-### 👥 Communities
+###  Communities
 - User-driven community creation.
 - Detailed community profiles and join request system.
 
-### 📨 Membership System
+###  Membership System
 - Workflow for Admins to approve or reject member requests.
 - Real-time tracking of user membership status across different groups.
 
-### 📝 Posts & Comments
+###  Posts & Comments
 - Community-specific feeds for discussions.
 - Full CRUD functionality for posts and threaded comments.
 
-### 📅 Events
+###  Events
 - Integrated calendar events within specific communities.
 - Automated visibility based on community membership.
 
-### 👨‍💼 Admin Controls
+###  Admin Controls
 - Global moderation tools for Super Admins.
 - Community-level moderation for designated Admins.
 
 ---
 
-## 🧩 Role System
+## Role System
 
 | Role | Permissions |
 | :--- | :--- |
@@ -114,7 +114,7 @@ The application follows a standard decoupled architecture:
 
 ---
 
-## 📂 Folder Structure
+##  Folder Structure
 
 ### Root Directory
 ```text
