@@ -52,7 +52,7 @@ The application follows a standard decoupled architecture:
 
 ---
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 ### Frontend
 - **React**: UI Library
