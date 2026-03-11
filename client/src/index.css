@@ -1,0 +1,32 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  width: 100%;
+  font-family: "Inter", sans-serif;
+}
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: #e0f2fe;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+  background: #38bdf8;
+}
+
+/* Handle on Hover */
+::-webkit-scrollbar-track:hover {
+  background: #bae6fd;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0ea5e9;
+}
