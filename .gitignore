@@ -3,4 +3,4 @@ server/node_modules/
 client/dist/
 *.log
 output/*
-input
+input/*.txt
