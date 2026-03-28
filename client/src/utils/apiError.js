@@ -1,8 +1,12 @@
 export function getApiErrorMessage(err, fallback = "Request failed") {
-  return (
+  const base =
     err?.data?.message ||
     err?.error ||
     err?.message ||
-    fallback
-  );
+    fallback;
+  const detail = err?.data?.detail;
+  if (detail && import.meta.env.DEV) {
+    return `${base} ${detail}`;
+  }
+  return base;
 }

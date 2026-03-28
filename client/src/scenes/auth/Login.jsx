@@ -170,6 +170,15 @@ export default function Login() {
             </Button>
 
             <Typography variant="body2" textAlign="center">
+              <Link
+                to="/forgot-password"
+                style={{ textDecoration: "none", fontWeight: 700 }}
+              >
+                Forgot password?
+              </Link>
+            </Typography>
+
+            <Typography variant="body2" textAlign="center">
               New here?{" "}
               <Link
                 to="/register"
