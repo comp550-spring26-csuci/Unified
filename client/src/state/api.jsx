@@ -32,6 +32,20 @@ export const api = createApi({
     login: build.mutation({
       query: (body) => ({ url: "api/auth/login", method: "POST", body }),
     }),
+    forgotPassword: build.mutation({
+      query: (body) => ({
+        url: "api/auth/forgot-password",
+        method: "POST",
+        body,
+      }),
+    }),
+    resetPasswordWithOtp: build.mutation({
+      query: (body) => ({
+        url: "api/auth/reset-password-otp",
+        method: "POST",
+        body,
+      }),
+    }),
     // IMPORTANT: accept token as arg so the cache key changes per-login.
     // We still read the real token from headers via prepareHeaders.
     me: build.query({
@@ -235,6 +249,8 @@ export const api = createApi({
 export const {
   useRegisterMutation,
   useLoginMutation,
+  useForgotPasswordMutation,
+  useResetPasswordWithOtpMutation,
   useMeQuery,
   useUpdateProfileMutation,
   useListCommunitiesQuery,

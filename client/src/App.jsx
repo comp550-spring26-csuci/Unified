@@ -10,6 +10,7 @@ import Layout from "@scenes/layout";
 import Dashboard from "@scenes/dashboard";
 import Login from "@scenes/auth/Login";
 import Register from "@scenes/auth/Register";
+import ForgotPassword from "@scenes/auth/ForgotPassword";
 import Communities from "@scenes/communities/Communities";
 import CommunityDetail from "@scenes/communities/CommunityDetail";
 import MyCommunities from "@scenes/communities/MyCommunities";
@@ -34,6 +35,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
 
             <Route element={<Layout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />

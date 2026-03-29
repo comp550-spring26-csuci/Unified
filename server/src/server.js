@@ -1,10 +1,11 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const path = require('path');
 
 const { connectDB } = require('./config/db');
+const { logMailConfigOnStartup } = require('./utils/mail');
 
 const authRoutes = require('./routes/authRoutes');
 const communityRoutes = require('./routes/communityRoutes');
@@ -55,6 +56,7 @@ const port = process.env.PORT || 5000;
 
 connectDB(process.env.MONGO_URI)
   .then(() => {
+    logMailConfigOnStartup();
     app.listen(port, () => {
       console.log(`API listening on http://localhost:${port}`);
     });

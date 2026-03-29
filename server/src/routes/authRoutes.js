@@ -2,7 +2,14 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const { register, login, me, updateProfile } = require('../controllers/authController');
+const {
+  register,
+  login,
+  me,
+  updateProfile,
+  forgotPassword,
+  resetPasswordWithOtp,
+} = require('../controllers/authController');
 const { authRequired } = require('../middleware/auth');
 
 const router = express.Router();
@@ -23,6 +30,8 @@ const upload = multer({ storage });
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password-otp', resetPasswordWithOtp);
 router.get('/me', authRequired, me);
 router.put('/me', authRequired, upload.single('avatar'), updateProfile);
 
