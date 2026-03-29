@@ -32,6 +32,18 @@ const createSchema = z.object({
   date: z.coerce.date(),
   venue: z.string().min(2).max(300),
   capacity: z.coerce.number().int().min(0).optional().default(0),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+}).superRefine((data, ctx) => {
+  const hasLatitude = data.latitude !== undefined;
+  const hasLongitude = data.longitude !== undefined;
+  if (hasLatitude !== hasLongitude) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Both latitude and longitude are required when selecting a map location',
+      path: hasLatitude ? ['longitude'] : ['latitude'],
+    });
+  }
 });
 
 async function createEvent(req, res) {
@@ -52,6 +64,10 @@ async function createEvent(req, res) {
     date: parsed.data.date,
     venue: parsed.data.venue,
     capacity: parsed.data.capacity,
+    location:
+      parsed.data.latitude !== undefined && parsed.data.longitude !== undefined
+        ? { lat: parsed.data.latitude, lng: parsed.data.longitude }
+        : undefined,
     imageUrl,
     attendees: [],
     volunteers: [],
