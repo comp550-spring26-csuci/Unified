@@ -218,6 +218,12 @@ export const api = createApi({
         formData.append("date", payload?.date || "");
         formData.append("venue", payload?.venue || "");
         formData.append("capacity", String(payload?.capacity ?? 0));
+        if (Number.isFinite(payload?.latitude)) {
+          formData.append("latitude", String(payload.latitude));
+        }
+        if (Number.isFinite(payload?.longitude)) {
+          formData.append("longitude", String(payload.longitude));
+        }
         if (payload?.imageUrl) formData.append("imageUrl", payload.imageUrl);
         if (payload?.imageFile) formData.append("image", payload.imageFile);
 

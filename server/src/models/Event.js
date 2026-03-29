@@ -8,6 +8,10 @@ const eventSchema = new mongoose.Schema(
     date: { type: Date, required: true, index: true },
     venue: { type: String, required: true, trim: true, maxlength: 300 },
     capacity: { type: Number, default: 0, min: 0 },
+    location: {
+      lat: { type: Number, min: -90, max: 90 },
+      lng: { type: Number, min: -180, max: 180 },
+    },
     imageUrl: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 

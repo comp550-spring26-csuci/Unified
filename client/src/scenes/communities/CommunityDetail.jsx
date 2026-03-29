@@ -8,6 +8,8 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
+  InputAdornment,
   List,
   ListItem,
   ListItemText,
@@ -19,6 +21,7 @@ import {
   Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import { GoogleMapPicker, GoogleMapViewer } from "@components/GoogleMapField";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -26,6 +29,7 @@ import {
   GroupsOutlined,
   LocationOnOutlined,
   PersonOutlined,
+  RoomOutlined,
   VolunteerActivismOutlined,
 } from "@mui/icons-material";
 import {
@@ -234,9 +238,12 @@ export default function CommunityDetail() {
   const [eventDate, setEventDate] = useState("");
   const [eventCapacity, setEventCapacity] = useState("");
   const [eventImageFile, setEventImageFile] = useState(null);
+  const [eventLocation, setEventLocation] = useState(null);
+  const [eventLocationDialogOpen, setEventLocationDialogOpen] = useState(false);
   const [rulesDraft, setRulesDraft] = useState("");
   const [attendeeDialogEventId, setAttendeeDialogEventId] = useState(null);
   const [volunteerDialogEventId, setVolunteerDialogEventId] = useState(null);
+  const [mapDialogEventId, setMapDialogEventId] = useState(null);
   const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
   const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
 
@@ -697,6 +704,12 @@ export default function CommunityDetail() {
                         label="Volunteers"
                         value={String(ev.volunteers?.length || 0)}
                       />
+                      {Number.isFinite(ev?.location?.lat) &&
+                      Number.isFinite(ev?.location?.lng) ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Map pin available for this event.
+                        </Typography>
+                      ) : null}
                     </Stack>
                     <Stack direction="row" spacing={1} mt={1}>
                       {normalizeId(ev.createdBy) === userId ? (
@@ -760,6 +773,16 @@ export default function CommunityDetail() {
                           Volunteer ({ev.volunteers?.length || 0})
                         </Button>
                       )}
+                      {Number.isFinite(ev?.location?.lat) &&
+                      Number.isFinite(ev?.location?.lng) ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => setMapDialogEventId(ev._id)}
+                        >
+                          View Map
+                        </Button>
+                      ) : null}
                     </Stack>
                   </Box>
                 </Stack>
@@ -887,6 +910,30 @@ export default function CommunityDetail() {
               )}
             </DialogContent>
           </Dialog>
+
+          <Dialog
+            open={!!mapDialogEventId}
+            onClose={() => setMapDialogEventId(null)}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              {(() => {
+                const event = (eventsQ.data?.events || []).find(
+                  (e) => e._id === mapDialogEventId,
+                );
+                return event ? `${event.title} Location` : "Event Location";
+              })()}
+            </DialogTitle>
+            <DialogContent>
+              {(() => {
+                const event = (eventsQ.data?.events || []).find(
+                  (e) => e._id === mapDialogEventId,
+                );
+                return <GoogleMapViewer value={event?.location || null} />;
+              })()}
+            </DialogContent>
+          </Dialog>
         </TabPanel>
 
         <TabPanel value={tab} index={4}>
@@ -912,22 +959,68 @@ export default function CommunityDetail() {
               </Alert>
             ) : null}
 
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} mb={2}>
-              <TextField
-                fullWidth
-                label="Title"
-                value={eventTitle}
-                onChange={(e) => setEventTitle(e.target.value)}
-                placeholder="Community Cleanup Drive"
-              />
+            <TextField
+              fullWidth
+              label="Title"
+              value={eventTitle}
+              onChange={(e) => setEventTitle(e.target.value)}
+              placeholder="Community Cleanup Drive"
+              sx={{ mb: 2 }}
+            />
+
+            <Box mb={2}>
               <TextField
                 fullWidth
                 label="Venue"
                 value={eventVenue}
                 onChange={(e) => setEventVenue(e.target.value)}
                 placeholder="Main Community Hall"
+                helperText={
+                  eventLocation
+                    ? `Map pin selected: ${eventLocation.lat.toFixed(6)}, ${eventLocation.lng.toFixed(6)}`
+                    : "Use the pin button to add an optional Google Maps location."
+                }
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        edge="end"
+                        color={eventLocation ? "primary" : "default"}
+                        onClick={() => setEventLocationDialogOpen(true)}
+                        aria-label="Select venue on map"
+                      >
+                        <RoomOutlined />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
-            </Stack>
+              {eventLocation ? (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  justifyContent="flex-end"
+                  alignItems="center"
+                  mt={0.5}
+                >
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => setEventLocationDialogOpen(true)}
+                  >
+                    Edit Pin
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="text"
+                    color="inherit"
+                    onClick={() => setEventLocation(null)}
+                  >
+                    Clear Pin
+                  </Button>
+                </Stack>
+              ) : null}
+            </Box>
 
             <TextField
               fullWidth
@@ -998,6 +1091,61 @@ export default function CommunityDetail() {
               />
             ) : null}
 
+            <Dialog
+              open={eventLocationDialogOpen}
+              onClose={() => setEventLocationDialogOpen(false)}
+              maxWidth="md"
+              fullWidth
+            >
+              <DialogTitle>Select Venue On Map</DialogTitle>
+              <DialogContent>
+                <Stack spacing={1.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    Click on the map to place or move the venue pin.
+                  </Typography>
+                  <GoogleMapPicker
+                    value={eventLocation}
+                    onChange={setEventLocation}
+                    onPlaceSelect={(placeLabel) => {
+                      if (placeLabel?.trim()) setEventVenue(placeLabel.trim());
+                    }}
+                    height={380}
+                  />
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    justifyContent="space-between"
+                    alignItems={{ sm: "center" }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      {eventLocation
+                        ? `Selected pin: ${eventLocation.lat.toFixed(6)}, ${eventLocation.lng.toFixed(6)}`
+                        : "No venue pin selected yet."}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      {eventLocation ? (
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="inherit"
+                          onClick={() => setEventLocation(null)}
+                        >
+                          Clear Pin
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => setEventLocationDialogOpen(false)}
+                      >
+                        Done
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Stack>
+              </DialogContent>
+            </Dialog>
+
             <Stack direction="row" spacing={1.5} justifyContent="flex-end">
               <Button
                 variant="text"
@@ -1008,6 +1156,8 @@ export default function CommunityDetail() {
                   setEventDate("");
                   setEventCapacity("");
                   setEventImageFile(null);
+                  setEventLocation(null);
+                  setEventLocationDialogOpen(false);
                 }}
               >
                 Clear
@@ -1028,6 +1178,8 @@ export default function CommunityDetail() {
                         venue: eventVenue,
                         date: new Date(eventDate).toISOString(),
                         capacity: Number(eventCapacity || 0),
+                        latitude: eventLocation?.lat,
+                        longitude: eventLocation?.lng,
                         imageFile: eventImageFile,
                       },
                     }).unwrap();
@@ -1037,6 +1189,8 @@ export default function CommunityDetail() {
                     setEventDate("");
                     setEventCapacity("");
                     setEventImageFile(null);
+                    setEventLocation(null);
+                    setEventLocationDialogOpen(false);
                     toast.success("Event created");
                     setTab(3);
                   } catch (err) {
