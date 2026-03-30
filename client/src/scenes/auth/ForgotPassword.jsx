@@ -15,6 +15,7 @@ import {
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import UnifiedBrand from "../../components/UnifiedBrand";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -96,27 +97,7 @@ export default function ForgotPassword() {
             gap: 2,
           }}
         >
-          <Box
-            onClick={() => navigate("/login")}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1.1,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              "&:hover": { opacity: 0.85 },
-            }}
-          >
-            <Box
-              component="img"
-              src="/logo.png"
-              alt="Unified Logo"
-              sx={{ width: 34, height: 34, objectFit: "contain" }}
-            />
-            <Typography fontWeight={900} sx={{ letterSpacing: "-0.01em" }}>
-              Unified
-            </Typography>
-          </Box>
+          <UnifiedBrand onClick={() => navigate("/login")} />
 
           <Button variant="outlined" onClick={() => navigate("/login")}>
             Sign in
