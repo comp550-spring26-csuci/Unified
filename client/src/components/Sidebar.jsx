@@ -27,6 +27,7 @@ import {
 import { useMyCommunitiesQuery } from "@state/api";
 
 import FlexBetween from "./FlexBetween";
+import UnifiedBrand from "./UnifiedBrand";
 
 const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
 
@@ -147,36 +148,10 @@ const Sidebar = ({
             {/* TOP BRAND AREA */}
             <Box m="1.5rem 2rem 1.25rem 2rem">
               <FlexBetween>
-                {/* LOGO + TEXT */}
-                <Box
+                <UnifiedBrand
+                  variant="sidebar"
                   onClick={() => navigate("/dashboard")}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1.1,
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    "&:hover": { opacity: 0.85 },
-                  }}
-                >
-                  <Box
-                    component="img"
-                    src="/logo.png"
-                    alt="Unified Logo"
-                    sx={{
-                      width: 34,
-                      height: 34,
-                      objectFit: "contain",
-                    }}
-                  />
-                  <Typography
-                    variant="h5"
-                    fontWeight={900}
-                    sx={{ letterSpacing: "-0.02em" }}
-                  >
-                    Unified
-                  </Typography>
-                </Box>
+                />
 
                 {!isNonMobile && (
                   <IconButton onClick={() => setIsSidebarOpen(!isSidebarOpen)}>

@@ -13,6 +13,7 @@ import { setAuth } from "@state";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import UnifiedBrand from "../../components/UnifiedBrand";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -61,32 +62,7 @@ export default function Login() {
             gap: 2,
           }}
         >
-          {/* BRAND (Logo + Text) */}
-          <Box
-            onClick={() => navigate("/login")}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1.1,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              "&:hover": { opacity: 0.85 },
-            }}
-          >
-            <Box
-              component="img"
-              src="/logo.png"
-              alt="Unified Logo"
-              sx={{
-                width: 34,
-                height: 34,
-                objectFit: "contain",
-              }}
-            />
-            <Typography fontWeight={900} sx={{ letterSpacing: "-0.01em" }}>
-              Unified
-            </Typography>
-          </Box>
+          <UnifiedBrand onClick={() => navigate("/login")} />
 
           <Button variant="contained" onClick={() => navigate("/register")}>
             Create account

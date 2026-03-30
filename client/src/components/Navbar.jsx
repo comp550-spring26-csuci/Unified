@@ -65,27 +65,6 @@ const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
             <MenuIcon />
           </IconButton>
 
-          {/* BRAND: LOGO + TEXT */}
-          <Box
-            onClick={() => navigate("/dashboard")}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1.2,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              "&:hover": { opacity: 0.85 },
-            }}
-          >
-            <Typography
-              fontWeight={900}
-              sx={{
-                fontSize: "1.2rem",
-                letterSpacing: "-0.02em",
-                color: "text.primary",
-              }}
-            ></Typography>
-          </Box>
         </FlexBetween>
 
         {/* CENTER LINKS */}
