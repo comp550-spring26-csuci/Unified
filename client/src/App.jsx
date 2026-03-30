@@ -13,6 +13,7 @@ import Register from "@scenes/auth/Register";
 import ForgotPassword from "@scenes/auth/ForgotPassword";
 import Communities from "@scenes/communities/Communities";
 import CommunityDetail from "@scenes/communities/CommunityDetail";
+import CommunityPastEvents from "@scenes/communities/CommunityPastEvents";
 import MyCommunities from "@scenes/communities/MyCommunities";
 import MembershipRequests from "@scenes/communities/MembershipRequests";
 import Profile from "@scenes/profile/Profile";
@@ -45,6 +46,12 @@ function App() {
                 element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <Communities />}
               />
               <Route path="/communities/:id" element={<CommunityDetail />} />
+              <Route
+                path="/communities/:id/past-events"
+                element={
+                  isSuperAdmin ? <Navigate to="/dashboard" replace /> : <CommunityPastEvents />
+                }
+              />
               <Route
                 path="/my-communities"
                 element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <MyCommunities />}
