@@ -26,14 +26,47 @@ async function listCommunityEvents(req, res) {
   return res.json({ events });
 }
 
+const agendaItemSchema = z.object({
+  title: z.string().max(200).optional().default(''),
+  durationMinutes: z.coerce.number().int().min(1).max(24 * 60),
+  gapBeforeMinutes: z.coerce.number().int().min(0).optional().default(0),
+});
+
+const agendaSchema = z
+  .object({
+    startOffsetMinutes: z.coerce.number().int().min(0).optional().default(0),
+    items: z.array(agendaItemSchema).max(100).optional().default([]),
+  })
+  .optional();
+
 const createSchema = z.object({
   title: z.string().min(2).max(120),
   description: z.string().max(5000).optional().default(''),
+  whoFor: z.string().max(2000).optional().default(''),
+  whatToBring: z.string().max(2000).optional().default(''),
+  volunteerRequirements: z.string().max(2000).optional().default(''),
   date: z.coerce.date(),
+  endDate: z.preprocess((raw) => {
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    return raw;
+  }, z.coerce.date().optional()),
   venue: z.string().min(2).max(300),
   capacity: z.coerce.number().int().min(0).optional().default(0),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
+  agenda: z
+    .preprocess((raw) => {
+      if (raw === undefined || raw === null || raw === '') return undefined;
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return undefined;
+        }
+      }
+      return raw;
+    }, agendaSchema)
+    .optional(),
 }).superRefine((data, ctx) => {
   const hasLatitude = data.latitude !== undefined;
   const hasLongitude = data.longitude !== undefined;
@@ -42,6 +75,13 @@ const createSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Both latitude and longitude are required when selecting a map location',
       path: hasLatitude ? ['longitude'] : ['latitude'],
+    });
+  }
+  if (data.endDate !== undefined && data.endDate.getTime() < data.date.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'End time must be on or after the start date and time',
+      path: ['endDate'],
     });
   }
 });
@@ -56,12 +96,28 @@ async function createEvent(req, res) {
 
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.imageUrl || '');
 
+  const agenda =
+    parsed.data.agenda && parsed.data.agenda.items?.length
+      ? {
+          startOffsetMinutes: parsed.data.agenda.startOffsetMinutes ?? 0,
+          items: parsed.data.agenda.items.map((it) => ({
+            title: it.title ?? '',
+            durationMinutes: it.durationMinutes,
+            gapBeforeMinutes: it.gapBeforeMinutes ?? 0,
+          })),
+        }
+      : undefined;
+
   const event = await Event.create({
     community: communityId,
     createdBy: req.auth.sub,
     title: parsed.data.title,
     description: parsed.data.description,
+    whoFor: parsed.data.whoFor ?? '',
+    whatToBring: parsed.data.whatToBring ?? '',
+    volunteerRequirements: parsed.data.volunteerRequirements ?? '',
     date: parsed.data.date,
+    ...(parsed.data.endDate !== undefined ? { endDate: parsed.data.endDate } : {}),
     venue: parsed.data.venue,
     capacity: parsed.data.capacity,
     location:
@@ -69,6 +125,7 @@ async function createEvent(req, res) {
         ? { lat: parsed.data.latitude, lng: parsed.data.longitude }
         : undefined,
     imageUrl,
+    ...(agenda ? { agenda } : {}),
     attendees: [],
     volunteers: [],
   });

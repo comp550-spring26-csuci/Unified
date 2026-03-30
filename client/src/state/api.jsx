@@ -215,7 +215,16 @@ export const api = createApi({
         const formData = new FormData();
         formData.append("title", payload?.title || "");
         formData.append("description", payload?.description || "");
+        formData.append("whoFor", payload?.whoFor ?? "");
+        formData.append("whatToBring", payload?.whatToBring ?? "");
+        formData.append(
+          "volunteerRequirements",
+          payload?.volunteerRequirements ?? "",
+        );
         formData.append("date", payload?.date || "");
+        if (payload?.endDate) {
+          formData.append("endDate", payload.endDate);
+        }
         formData.append("venue", payload?.venue || "");
         formData.append("capacity", String(payload?.capacity ?? 0));
         if (Number.isFinite(payload?.latitude)) {
@@ -226,6 +235,9 @@ export const api = createApi({
         }
         if (payload?.imageUrl) formData.append("imageUrl", payload.imageUrl);
         if (payload?.imageFile) formData.append("image", payload.imageFile);
+        if (payload?.agenda != null) {
+          formData.append("agenda", JSON.stringify(payload.agenda));
+        }
 
         return {
           url: `api/communities/${communityId}/events`,

@@ -1,6 +1,5 @@
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Chip,
@@ -10,9 +9,6 @@ import {
   Divider,
   IconButton,
   InputAdornment,
-  List,
-  ListItem,
-  ListItemText,
   MenuItem,
   Stack,
   Tab,
@@ -21,17 +17,10 @@ import {
   Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { GoogleMapPicker, GoogleMapViewer } from "@components/GoogleMapField";
+import { GoogleMapPicker } from "@components/GoogleMapField";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
-import {
-  AccessTimeOutlined,
-  GroupsOutlined,
-  LocationOnOutlined,
-  PersonOutlined,
-  RoomOutlined,
-  VolunteerActivismOutlined,
-} from "@mui/icons-material";
+import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
+import { Add, DragIndicator, RoomOutlined } from "@mui/icons-material";
 import {
   useCreateCommentMutation,
   useCreateEventMutation,
@@ -41,50 +30,40 @@ import {
   useListCommentsQuery,
   useListCommunityMembersQuery,
   useListEventsQuery,
-  useLazyGetEventOwnerDetailQuery,
   useMyMembershipsQuery,
   useListPostsQuery,
-  useRsvpMutation,
   useUpdateCommunityMemberRoleMutation,
   useUpdateCommunityRulesMutation,
-  useVolunteerMutation,
 } from "@state/api";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import CommunityEventsList from "./CommunityEventsList";
+import {
+  computeAgendaSlots,
+  formatAgendaClock,
+  normalizeId,
+  parseDateTimeLocalInput,
+  parseTimeOnDatePart,
+} from "./communityEventShared";
 
 function TabPanel({ value, index, children }) {
   if (value !== index) return null;
   return <Box mt={2}>{children}</Box>;
 }
 
-const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
+const AGENDA_DND_MIME = "application/x-agenda-index";
 
-function normalizeId(value) {
-  if (!value) return "";
-  if (typeof value === "string" || typeof value === "number")
-    return String(value);
-  return String(value?._id || value?.id || "");
-}
-
-function toAbsoluteMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
-}
-
-function MetaRow({ icon, label, value }) {
-  return (
-    <Stack direction="row" spacing={1} alignItems="center">
-      {icon}
-      <Typography variant="body2" color="text.secondary">
-        {label}:
-      </Typography>
-      <Typography variant="body2" fontWeight={600}>
-        {value}
-      </Typography>
-    </Stack>
-  );
+function newAgendaRow() {
+  return {
+    id:
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `agenda-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title: "",
+    durationMinutes: 30,
+    gapBeforeMinutes: 0,
+  };
 }
 
 function PostCard({ post, communityId, onLike }) {
@@ -210,6 +189,7 @@ function PostCard({ post, communityId, onLike }) {
 
 export default function CommunityDetail() {
   const { id: communityId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(0);
   const user = useSelector((s) => s.global.user);
   const userId = normalizeId(user);
@@ -227,8 +207,6 @@ export default function CommunityDetail() {
     useUpdateCommunityRulesMutation();
   const [updateCommunityMemberRole, { isLoading: isUpdatingMemberRole }] =
     useUpdateCommunityMemberRoleMutation();
-  const [rsvp] = useRsvpMutation();
-  const [volunteer] = useVolunteerMutation();
 
   const [postText, setPostText] = useState("");
 
@@ -236,16 +214,19 @@ export default function CommunityDetail() {
   const [eventDescription, setEventDescription] = useState("");
   const [eventVenue, setEventVenue] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [eventEndDate, setEventEndDate] = useState("");
+  const [eventWhoFor, setEventWhoFor] = useState("");
+  const [eventWhatToBring, setEventWhatToBring] = useState("");
+  const [eventVolunteerRequirements, setEventVolunteerRequirements] =
+    useState("");
   const [eventCapacity, setEventCapacity] = useState("");
+  const [showCreateEventErrors, setShowCreateEventErrors] = useState(false);
   const [eventImageFile, setEventImageFile] = useState(null);
   const [eventLocation, setEventLocation] = useState(null);
   const [eventLocationDialogOpen, setEventLocationDialogOpen] = useState(false);
+  const [agendaFirstOffsetMinutes, setAgendaFirstOffsetMinutes] = useState(0);
+  const [agendaItems, setAgendaItems] = useState(() => [newAgendaRow()]);
   const [rulesDraft, setRulesDraft] = useState("");
-  const [attendeeDialogEventId, setAttendeeDialogEventId] = useState(null);
-  const [volunteerDialogEventId, setVolunteerDialogEventId] = useState(null);
-  const [mapDialogEventId, setMapDialogEventId] = useState(null);
-  const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
-  const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
 
   const postsError = postsQ.error?.data?.message;
   const eventsError = eventsQ.error?.data?.message;
@@ -313,6 +294,92 @@ export default function CommunityDetail() {
     () => (eventImageFile ? URL.createObjectURL(eventImageFile) : ""),
     [eventImageFile],
   );
+
+  const createEventRequiredOk = useMemo(() => {
+    const titleOk = eventTitle.trim().length >= 2;
+    const venueOk = eventVenue.trim().length >= 2;
+    const dateOk =
+      Boolean(eventDate.trim()) &&
+      !Number.isNaN(new Date(eventDate).getTime());
+    return titleOk && venueOk && dateOk;
+  }, [eventTitle, eventVenue, eventDate]);
+
+  const createEventEndOk = useMemo(() => {
+    if (!eventEndDate.trim()) return true;
+    const endMs = new Date(eventEndDate).getTime();
+    if (Number.isNaN(endMs)) return false;
+    const startMs = new Date(eventDate).getTime();
+    if (Number.isNaN(startMs)) return true;
+    return endMs >= startMs;
+  }, [eventEndDate, eventDate]);
+
+  useEffect(() => {
+    if (createEventRequiredOk && createEventEndOk && showCreateEventErrors) {
+      setShowCreateEventErrors(false);
+    }
+  }, [createEventRequiredOk, createEventEndOk, showCreateEventErrors]);
+
+  const upcomingEvents = useMemo(() => {
+    const now = Date.now();
+    return (eventsQ.data?.events || [])
+      .filter((ev) => new Date(ev.date).getTime() >= now)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [eventsQ.data?.events]);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "events" || t === "3") {
+      setTab(3);
+      const next = new URLSearchParams(searchParams);
+      next.delete("tab");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const agendaSlots = useMemo(
+    () => computeAgendaSlots(eventDate, agendaFirstOffsetMinutes, agendaItems),
+    [eventDate, agendaFirstOffsetMinutes, agendaItems],
+  );
+
+  const updateAgendaStartFromPicker = (index, timeHHmm) => {
+    if (!eventDate?.trim() || !timeHHmm) return;
+    const eventStart = parseDateTimeLocalInput(eventDate);
+    if (!eventStart) return;
+    const datePart = eventDate.split("T")[0];
+    const picked = parseTimeOnDatePart(datePart, timeHHmm);
+    if (!picked) return;
+
+    if (index === 0) {
+      const delta = Math.round((picked.getTime() - eventStart.getTime()) / 60000);
+      setAgendaFirstOffsetMinutes(delta);
+      return;
+    }
+
+    const slots = computeAgendaSlots(
+      eventDate,
+      agendaFirstOffsetMinutes,
+      agendaItems,
+    );
+    const prevEnd = slots[index - 1]?.end;
+    if (!prevEnd || Number.isNaN(prevEnd.getTime())) return;
+    const gap = Math.round((picked.getTime() - prevEnd.getTime()) / 60000);
+    setAgendaItems((prev) =>
+      prev.map((it, j) =>
+        j === index ? { ...it, gapBeforeMinutes: Math.max(0, gap) } : it,
+      ),
+    );
+  };
+
+  const reorderAgendaRows = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    setAgendaItems((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, removed);
+      return next.map((it) => ({ ...it, gapBeforeMinutes: 0 }));
+    });
+    setAgendaFirstOffsetMinutes(0);
+  };
 
   useEffect(() => {
     return () => {
@@ -598,342 +665,33 @@ export default function CommunityDetail() {
         </TabPanel>
 
         <TabPanel value={tab} index={3}>
-          {eventsError ? (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {eventsError}
-            </Alert>
-          ) : null}
-
-          <Stack spacing={2}>
-            {(eventsQ.data?.events || []).map((ev) => (
-              <Box key={ev._id} p={2} borderRadius={2} bgcolor="background.alt">
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                  {ev.imageUrl ? (
-                    <Box
-                      component="img"
-                      src={toAbsoluteMediaUrl(ev.imageUrl)}
-                      alt={ev.title}
-                      sx={{
-                        width: { xs: "100%", md: 280 },
-                        minWidth: { md: 280 },
-                        aspectRatio: "16 / 10",
-                        objectFit: "cover",
-                        borderRadius: 1.5,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        backgroundColor: "background.paper",
-                      }}
-                    />
-                  ) : null}
-
-                  <Box flex={1} minWidth={0}>
-                    <Stack
-                      direction="row"
-                      justifyContent="space-between"
-                      alignItems="center"
-                      mb={1}
-                    >
-                      <Typography fontWeight={700}>{ev.title}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Event
-                      </Typography>
-                    </Stack>
-                    {ev.description ? (
-                      <Typography mt={1}>{ev.description}</Typography>
-                    ) : null}
-                    <Stack spacing={0.8} mt={1.2}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <PersonOutlined sx={{ fontSize: 18, color: "text.secondary" }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Owner:
-                        </Typography>
-                        {isCommunityOwner ? (
-                          <Button
-                            size="small"
-                            variant="text"
-                            sx={{ textTransform: "none", p: 0, minWidth: 0 }}
-                            onClick={() => {
-                              setOwnerDetailEvent(ev);
-                              fetchEventOwnerDetail({
-                                communityId,
-                                eventId: ev._id,
-                              });
-                            }}
-                          >
-                            {ev.createdBy?.name ?? "Unknown"}
-                          </Button>
-                        ) : (
-                          <Typography variant="body2" fontWeight={600}>
-                            {ev.createdBy?.name ?? "Unknown"}
-                          </Typography>
-                        )}
-                      </Stack>
-                      <MetaRow
-                        icon={
-                          <AccessTimeOutlined
-                            sx={{ fontSize: 18, color: "text.secondary" }}
-                          />
-                        }
-                        label="Date & Time"
-                        value={new Date(ev.date).toLocaleString()}
-                      />
-                      <MetaRow
-                        icon={
-                          <LocationOnOutlined
-                            sx={{ fontSize: 18, color: "text.secondary" }}
-                          />
-                        }
-                        label="Venue"
-                        value={ev.venue || "TBA"}
-                      />
-                      <MetaRow
-                        icon={
-                          <GroupsOutlined
-                            sx={{ fontSize: 18, color: "text.secondary" }}
-                          />
-                        }
-                        label="Attendees"
-                        value={`${ev.attendees?.length || 0}${ev.capacity > 0 ? ` / ${ev.capacity}` : ""}`}
-                      />
-                      <MetaRow
-                        icon={
-                          <VolunteerActivismOutlined
-                            sx={{ fontSize: 18, color: "text.secondary" }}
-                          />
-                        }
-                        label="Volunteers"
-                        value={String(ev.volunteers?.length || 0)}
-                      />
-                      {Number.isFinite(ev?.location?.lat) &&
-                      Number.isFinite(ev?.location?.lng) ? (
-                        <Typography variant="caption" color="text.secondary">
-                          Map pin available for this event.
-                        </Typography>
-                      ) : null}
-                    </Stack>
-                    <Stack direction="row" spacing={1} mt={1}>
-                      {normalizeId(ev.createdBy) === userId ? (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => setAttendeeDialogEventId(ev._id)}
-                        >
-                          RSVP ({ev.attendees?.length || 0})
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={async () => {
-                            try {
-                              await rsvp({
-                                communityId,
-                                eventId: ev._id,
-                              }).unwrap();
-                              toast.success("RSVP updated");
-                            } catch (err) {
-                              toast.error(
-                                getApiErrorMessage(err, "Failed to update RSVP"),
-                              );
-                            }
-                          }}
-                        >
-                          RSVP ({ev.attendees?.length || 0})
-                        </Button>
-                      )}
-                      {normalizeId(ev.createdBy) === userId ? (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => setVolunteerDialogEventId(ev._id)}
-                        >
-                          Volunteer ({ev.volunteers?.length || 0})
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={async () => {
-                            try {
-                              await volunteer({
-                                communityId,
-                                eventId: ev._id,
-                              }).unwrap();
-                              toast.success("Volunteer status updated");
-                            } catch (err) {
-                              toast.error(
-                                getApiErrorMessage(
-                                  err,
-                                  "Failed to update volunteer status",
-                                ),
-                              );
-                            }
-                          }}
-                        >
-                          Volunteer ({ev.volunteers?.length || 0})
-                        </Button>
-                      )}
-                      {Number.isFinite(ev?.location?.lat) &&
-                      Number.isFinite(ev?.location?.lng) ? (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => setMapDialogEventId(ev._id)}
-                        >
-                          View Map
-                        </Button>
-                      ) : null}
-                    </Stack>
-                  </Box>
-                </Stack>
-              </Box>
-            ))}
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            justifyContent="space-between"
+            alignItems={{ sm: "center" }}
+            spacing={1.5}
+            mb={2}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Upcoming and in-progress events (soonest first).
+            </Typography>
+            <Button
+              component={RouterLink}
+              to={`/communities/${communityId}/past-events`}
+              variant="outlined"
+              size="small"
+            >
+              Past Events
+            </Button>
           </Stack>
-
-          <Dialog
-            open={!!attendeeDialogEventId}
-            onClose={() => setAttendeeDialogEventId(null)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Attendees</DialogTitle>
-            <DialogContent>
-              {(() => {
-                const event = (eventsQ.data?.events || []).find(
-                  (e) => e._id === attendeeDialogEventId,
-                );
-                const attendees = event?.attendees || [];
-                if (attendees.length === 0) {
-                  return (
-                    <Typography color="text.secondary">
-                      No one has RSVP'd yet.
-                    </Typography>
-                  );
-                }
-                return (
-                  <List dense disablePadding>
-                    {attendees.map((a) => (
-                      <ListItem key={a._id || a} disablePadding sx={{ py: 0.5 }}>
-                        <ListItemText
-                          primary={typeof a === "object" ? a?.name ?? "Unknown" : "Unknown"}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                );
-              })()}
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            open={!!volunteerDialogEventId}
-            onClose={() => setVolunteerDialogEventId(null)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Volunteers</DialogTitle>
-            <DialogContent>
-              {(() => {
-                const event = (eventsQ.data?.events || []).find(
-                  (e) => e._id === volunteerDialogEventId,
-                );
-                const volunteers = event?.volunteers || [];
-                if (volunteers.length === 0) {
-                  return (
-                    <Typography color="text.secondary">
-                      No one has volunteered yet.
-                    </Typography>
-                  );
-                }
-                return (
-                  <List dense disablePadding>
-                    {volunteers.map((v) => (
-                      <ListItem key={v._id || v} disablePadding sx={{ py: 0.5 }}>
-                        <ListItemText
-                          primary={typeof v === "object" ? v?.name ?? "Unknown" : "Unknown"}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                );
-              })()}
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            open={!!ownerDetailEvent}
-            onClose={() => setOwnerDetailEvent(null)}
-            maxWidth="sm"
-            fullWidth
-          >
-            <DialogTitle>Event Owner Details</DialogTitle>
-            <DialogContent>
-              {ownerDetailQ.isFetching ? (
-                <Typography color="text.secondary">Loading owner details...</Typography>
-              ) : ownerDetailQ.error ? (
-                <Alert severity="warning">
-                  {ownerDetailQ.error?.data?.message || "Failed to load owner details"}
-                </Alert>
-              ) : ownerDetailQ.data?.owner ? (
-                <Stack spacing={1.2}>
-                  <Stack direction="row" spacing={1.5} alignItems="center">
-                    <Avatar
-                      src={toAbsoluteMediaUrl(ownerDetailQ.data.owner.avatarUrl || "") || undefined}
-                      alt={ownerDetailQ.data.owner.name || "Owner"}
-                      sx={{ width: 44, height: 44 }}
-                    >
-                      {(ownerDetailQ.data.owner.name || "O").charAt(0).toUpperCase()}
-                    </Avatar>
-                    <Box>
-                      <Typography fontWeight={700}>{ownerDetailQ.data.owner.name || "-"}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {ownerDetailQ.data.owner.email || "-"}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                  <Typography variant="body2">
-                    <strong>Mailing Address:</strong> {ownerDetailQ.data.owner.mailingAddress || "-"}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Location:</strong>{" "}
-                    {[ownerDetailQ.data.owner.city, ownerDetailQ.data.owner.country].filter(Boolean).join(", ") || "-"}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Interests:</strong>{" "}
-                    {(ownerDetailQ.data.owner.interests || []).length
-                      ? ownerDetailQ.data.owner.interests.join(", ")
-                      : "-"}
-                  </Typography>
-                </Stack>
-              ) : (
-                <Typography color="text.secondary">No owner details found.</Typography>
-              )}
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            open={!!mapDialogEventId}
-            onClose={() => setMapDialogEventId(null)}
-            maxWidth="md"
-            fullWidth
-          >
-            <DialogTitle>
-              {(() => {
-                const event = (eventsQ.data?.events || []).find(
-                  (e) => e._id === mapDialogEventId,
-                );
-                return event ? `${event.title} Location` : "Event Location";
-              })()}
-            </DialogTitle>
-            <DialogContent>
-              {(() => {
-                const event = (eventsQ.data?.events || []).find(
-                  (e) => e._id === mapDialogEventId,
-                );
-                return <GoogleMapViewer value={event?.location || null} />;
-              })()}
-            </DialogContent>
-          </Dialog>
+          <CommunityEventsList
+            communityId={communityId}
+            events={upcomingEvents}
+            eventsError={eventsError}
+            isCommunityOwner={isCommunityOwner}
+            userId={userId}
+            emptyMessage="No upcoming events yet."
+          />
         </TabPanel>
 
         <TabPanel value={tab} index={4}>
@@ -949,8 +707,9 @@ export default function CommunityDetail() {
               Create Event
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Add details, schedule date/time, and optionally attach an event
-              image.
+              <strong>Title</strong>, <strong>Venue</strong>, and{" "}
+              <strong>Date &amp; time</strong> are required. Add optional
+              details and an image if you like.
             </Typography>
             {!membershipsQ.isLoading && !isApprovedMember ? (
               <Alert severity="warning" sx={{ mb: 2 }}>
@@ -961,24 +720,43 @@ export default function CommunityDetail() {
 
             <TextField
               fullWidth
+              required
               label="Title"
               value={eventTitle}
               onChange={(e) => setEventTitle(e.target.value)}
               placeholder="Community Cleanup Drive"
+              error={
+                showCreateEventErrors &&
+                (!eventTitle.trim() || eventTitle.trim().length < 2)
+              }
+              helperText={
+                showCreateEventErrors &&
+                (!eventTitle.trim() || eventTitle.trim().length < 2)
+                  ? !eventTitle.trim()
+                    ? "Title is required."
+                    : "Use at least 2 characters."
+                  : undefined
+              }
               sx={{ mb: 2 }}
             />
 
             <Box mb={2}>
               <TextField
                 fullWidth
+                required
                 label="Venue"
                 value={eventVenue}
                 onChange={(e) => setEventVenue(e.target.value)}
                 placeholder="Main Community Hall"
+                error={
+                  showCreateEventErrors && eventVenue.trim().length < 2
+                }
                 helperText={
-                  eventLocation
-                    ? `Map pin selected: ${eventLocation.lat.toFixed(6)}, ${eventLocation.lng.toFixed(6)}`
-                    : "Use the pin button to add an optional Google Maps location."
+                  showCreateEventErrors && eventVenue.trim().length < 2
+                    ? "Venue is required (at least 2 characters)."
+                    : eventLocation
+                      ? `Map pin selected: ${eventLocation.lat.toFixed(6)}, ${eventLocation.lng.toFixed(6)}`
+                      : "Use the pin button to add an optional Google Maps location."
                 }
                 InputProps={{
                   endAdornment: (
@@ -1022,26 +800,46 @@ export default function CommunityDetail() {
               ) : null}
             </Box>
 
-            <TextField
-              fullWidth
-              multiline
-              minRows={3}
-              label="Description"
-              value={eventDescription}
-              onChange={(e) => setEventDescription(e.target.value)}
-              placeholder="Share agenda, items to bring, and any notes."
-              sx={{ mb: 2 }}
-            />
-
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} mb={2}>
               <TextField
                 fullWidth
+                required
                 type="datetime-local"
                 label="Date & Time"
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
                 inputProps={{ step: 60 }}
+                error={
+                  showCreateEventErrors &&
+                  (!eventDate.trim() ||
+                    Number.isNaN(new Date(eventDate).getTime()))
+                }
+                helperText={
+                  showCreateEventErrors &&
+                  (!eventDate.trim() ||
+                    Number.isNaN(new Date(eventDate).getTime()))
+                    ? "A valid date and time is required."
+                    : undefined
+                }
+              />
+              <TextField
+                fullWidth
+                type="datetime-local"
+                label="End date & time"
+                value={eventEndDate}
+                onChange={(e) => setEventEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ step: 60 }}
+                error={showCreateEventErrors && !createEventEndOk}
+                helperText={
+                  showCreateEventErrors && !createEventEndOk
+                    ? eventEndDate.trim() &&
+                        Number.isNaN(new Date(eventEndDate).getTime())
+                      ? "Enter a valid end date and time."
+                      : "End must be on or after the start."
+                    : "Optional — when the event is expected to finish."
+                }
               />
               <TextField
                 fullWidth
@@ -1051,6 +849,231 @@ export default function CommunityDetail() {
                 onChange={(e) => setEventCapacity(e.target.value)}
               />
             </Stack>
+
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="Description"
+              value={eventDescription}
+              onChange={(e) => setEventDescription(e.target.value)}
+              placeholder="General overview, links, or other notes."
+              sx={{ mb: 2 }}
+            />
+
+            <Box
+              mb={2}
+              p={2}
+              borderRadius={2}
+              border="1px solid"
+              borderColor="divider"
+              bgcolor="background.default"
+            >
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                Agenda
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                Start and end times follow this event’s <strong>Date &amp; time</strong>{" "}
+                (under Venue). End is computed from start + duration. Drag rows to
+                reorder; times reflow from the event start.
+              </Typography>
+              {!eventDate.trim() ? (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  Enter <strong>Date &amp; time</strong> (under Venue) to enable
+                  agenda start times and calculate end times.
+                </Alert>
+              ) : null}
+              <Stack spacing={1.5}>
+                {agendaItems.map((row, index) => {
+                  const slot = agendaSlots[index] || {
+                    start: null,
+                    end: null,
+                  };
+                  const startInputValue =
+                    slot.start && !Number.isNaN(slot.start.getTime())
+                      ? `${String(slot.start.getHours()).padStart(2, "0")}:${String(slot.start.getMinutes()).padStart(2, "0")}`
+                      : "";
+
+                  return (
+                    <Stack
+                      key={row.id}
+                      direction={{ xs: "column", md: "row" }}
+                      spacing={1}
+                      alignItems={{ md: "center" }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = Number(
+                          e.dataTransfer.getData(AGENDA_DND_MIME) ||
+                            e.dataTransfer.getData("text/plain"),
+                        );
+                        if (Number.isNaN(from)) return;
+                        reorderAgendaRows(from, index);
+                      }}
+                      sx={{
+                        flexWrap: "wrap",
+                        py: 0.5,
+                        borderRadius: 1,
+                        "&:hover": { bgcolor: "action.hover" },
+                      }}
+                    >
+                      <Box
+                        component="span"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            AGENDA_DND_MIME,
+                            String(index),
+                          );
+                          e.dataTransfer.setData("text/plain", String(index));
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        sx={{
+                          cursor: "grab",
+                          color: "text.secondary",
+                          display: "inline-flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <IconButton
+                          size="small"
+                          aria-label="Drag to reorder"
+                          tabIndex={-1}
+                          sx={{ pointerEvents: "none", color: "inherit" }}
+                        >
+                          <DragIndicator fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      <TextField
+                        size="small"
+                        label="Topic"
+                        value={row.title}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setAgendaItems((prev) =>
+                            prev.map((it, j) =>
+                              j === index ? { ...it, title: v } : it,
+                            ),
+                          );
+                        }}
+                        placeholder="Session or task"
+                        sx={{ flex: { md: "1 1 140px" }, minWidth: 120 }}
+                      />
+                      <TextField
+                        size="small"
+                        type="time"
+                        label="Start"
+                        value={startInputValue}
+                        onChange={(e) =>
+                          updateAgendaStartFromPicker(index, e.target.value)
+                        }
+                        disabled={!eventDate.trim()}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={
+                          index === 0 ? { step: 1 } : { step: 60 }
+                        }
+                        helperText={
+                          !eventDate.trim() && index === 0
+                            ? "Set Date & time under Venue"
+                            : ""
+                        }
+                        FormHelperTextProps={{ sx: { mx: 0 } }}
+                        sx={{ width: { xs: "100%", md: 130 } }}
+                      />
+                      <TextField
+                        size="small"
+                        type="number"
+                        label="Duration (min)"
+                        value={row.durationMinutes}
+                        onChange={(e) => {
+                          const n = Math.max(
+                            1,
+                            Math.min(
+                              24 * 60,
+                              Number(e.target.value) || 1,
+                            ),
+                          );
+                          setAgendaItems((prev) =>
+                            prev.map((it, j) =>
+                              j === index ? { ...it, durationMinutes: n } : it,
+                            ),
+                          );
+                        }}
+                        inputProps={{ min: 1, max: 24 * 60 }}
+                        sx={{ width: { xs: "100%", md: 120 } }}
+                      />
+                      <TextField
+                        size="small"
+                        label="End"
+                        value={formatAgendaClock(slot.end)}
+                        disabled
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ width: { xs: "100%", md: 130 } }}
+                      />
+                    </Stack>
+                  );
+                })}
+              </Stack>
+              <Stack direction="row" justifyContent="flex-end" alignItems="center" mt={1}>
+                <IconButton
+                  color="primary"
+                  aria-label="Add agenda row"
+                  onClick={() =>
+                    setAgendaItems((prev) => [...prev, newAgendaRow()])
+                  }
+                >
+                  <Add />
+                </IconButton>
+              </Stack>
+            </Box>
+
+            <Box
+              mb={2}
+              p={2}
+              borderRadius={2}
+              border="1px solid"
+              borderColor="divider"
+              bgcolor="background.default"
+            >
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                Attendees &amp; volunteers
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                Optional. These appear on the event details view.
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Who this event is for"
+                value={eventWhoFor}
+                onChange={(e) => setEventWhoFor(e.target.value)}
+                placeholder="e.g. All ages, members only, families with children"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="What to bring"
+                value={eventWhatToBring}
+                onChange={(e) => setEventWhatToBring(e.target.value)}
+                placeholder="e.g. Water bottle, closed-toe shoes, signed waiver"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Volunteer requirements"
+                value={eventVolunteerRequirements}
+                onChange={(e) => setEventVolunteerRequirements(e.target.value)}
+                placeholder="e.g. First aid certification, ability to lift 25 lb"
+              />
+            </Box>
 
             <Stack
               direction={{ xs: "column", sm: "row" }}
@@ -1154,10 +1177,17 @@ export default function CommunityDetail() {
                   setEventDescription("");
                   setEventVenue("");
                   setEventDate("");
+                  setEventEndDate("");
+                  setEventWhoFor("");
+                  setEventWhatToBring("");
+                  setEventVolunteerRequirements("");
                   setEventCapacity("");
                   setEventImageFile(null);
                   setEventLocation(null);
                   setEventLocationDialogOpen(false);
+                  setAgendaFirstOffsetMinutes(0);
+                  setAgendaItems([newAgendaRow()]);
+                  setShowCreateEventErrors(false);
                 }}
               >
                 Clear
@@ -1169,28 +1199,71 @@ export default function CommunityDetail() {
                     toast.error("Membership required");
                     return;
                   }
+                  if (!createEventRequiredOk) {
+                    setShowCreateEventErrors(true);
+                    toast.error(
+                      "Please enter Title, Venue, and a valid Date & time.",
+                    );
+                    return;
+                  }
+                  if (!createEventEndOk) {
+                    setShowCreateEventErrors(true);
+                    toast.error(
+                      "Check the end date and time — it must be on or after the start.",
+                    );
+                    return;
+                  }
                   try {
                     await createEvent({
                       communityId,
                       payload: {
-                        title: eventTitle,
+                        title: eventTitle.trim(),
                         description: eventDescription,
-                        venue: eventVenue,
+                        whoFor: eventWhoFor,
+                        whatToBring: eventWhatToBring,
+                        volunteerRequirements: eventVolunteerRequirements,
+                        venue: eventVenue.trim(),
                         date: new Date(eventDate).toISOString(),
+                        endDate:
+                          eventEndDate.trim() &&
+                          !Number.isNaN(new Date(eventEndDate).getTime())
+                            ? new Date(eventEndDate).toISOString()
+                            : undefined,
                         capacity: Number(eventCapacity || 0),
                         latitude: eventLocation?.lat,
                         longitude: eventLocation?.lng,
                         imageFile: eventImageFile,
+                        agenda: {
+                          startOffsetMinutes: agendaFirstOffsetMinutes,
+                          items: agendaItems.map((it) => ({
+                            title: (it.title || "").trim(),
+                            durationMinutes: Math.min(
+                              24 * 60,
+                              Math.max(1, Number(it.durationMinutes) || 30),
+                            ),
+                            gapBeforeMinutes: Math.max(
+                              0,
+                              Number(it.gapBeforeMinutes) || 0,
+                            ),
+                          })),
+                        },
                       },
                     }).unwrap();
                     setEventTitle("");
                     setEventDescription("");
                     setEventVenue("");
                     setEventDate("");
+                    setEventEndDate("");
+                    setEventWhoFor("");
+                    setEventWhatToBring("");
+                    setEventVolunteerRequirements("");
                     setEventCapacity("");
                     setEventImageFile(null);
                     setEventLocation(null);
                     setEventLocationDialogOpen(false);
+                    setAgendaFirstOffsetMinutes(0);
+                    setAgendaItems([newAgendaRow()]);
+                    setShowCreateEventErrors(false);
                     toast.success("Event created");
                     setTab(3);
                   } catch (err) {
@@ -1199,12 +1272,7 @@ export default function CommunityDetail() {
                     );
                   }
                 }}
-                disabled={
-                  !isApprovedMember ||
-                  !eventTitle.trim() ||
-                  !eventVenue.trim() ||
-                  !eventDate.trim()
-                }
+                disabled={!isApprovedMember}
               >
                 Create Event
               </Button>
