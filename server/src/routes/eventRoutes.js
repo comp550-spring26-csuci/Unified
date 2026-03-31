@@ -3,7 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { authRequired } = require('../middleware/auth');
-const { listCommunityEvents, createEvent, rsvp, volunteer, getEventOwnerDetails } = require('../controllers/eventController');
+const {
+  listCommunityEvents,
+  createEvent,
+  updateEvent,
+  rsvp,
+  volunteer,
+  getEventOwnerDetails,
+} = require('../controllers/eventController');
 
 const router = express.Router({ mergeParams: true });
 const uploadDir = path.join(__dirname, '..', 'uploads');
@@ -27,6 +34,7 @@ router.use(authRequired);
 
 router.get('/', listCommunityEvents);
 router.post('/', upload.single('image'), createEvent);
+router.patch('/:eventId', upload.single('image'), updateEvent);
 router.get('/:eventId/owner', getEventOwnerDetails);
 router.post('/:eventId/rsvp', rsvp);
 router.post('/:eventId/volunteer', volunteer);

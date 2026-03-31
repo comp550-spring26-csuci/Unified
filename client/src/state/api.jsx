@@ -206,6 +206,10 @@ export const api = createApi({
       query: (communityId) => `api/communities/${communityId}/events`,
       providesTags: ["Events"],
     }),
+    myEvents: build.query({
+      query: () => "api/me/events",
+      providesTags: ["Events"],
+    }),
     getEventOwnerDetail: build.query({
       query: ({ communityId, eventId }) =>
         `api/communities/${communityId}/events/${eventId}/owner`,
@@ -242,6 +246,43 @@ export const api = createApi({
         return {
           url: `api/communities/${communityId}/events`,
           method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: ["Events"],
+    }),
+    updateEvent: build.mutation({
+      query: ({ communityId, eventId, payload }) => {
+        const formData = new FormData();
+        formData.append("title", payload?.title || "");
+        formData.append("description", payload?.description || "");
+        formData.append("whoFor", payload?.whoFor ?? "");
+        formData.append("whatToBring", payload?.whatToBring ?? "");
+        formData.append(
+          "volunteerRequirements",
+          payload?.volunteerRequirements ?? "",
+        );
+        formData.append("date", payload?.date || "");
+        if (payload?.endDate) {
+          formData.append("endDate", payload.endDate);
+        }
+        formData.append("venue", payload?.venue || "");
+        formData.append("capacity", String(payload?.capacity ?? 0));
+        if (Number.isFinite(payload?.latitude)) {
+          formData.append("latitude", String(payload.latitude));
+        }
+        if (Number.isFinite(payload?.longitude)) {
+          formData.append("longitude", String(payload.longitude));
+        }
+        if (payload?.imageUrl) formData.append("imageUrl", payload.imageUrl);
+        if (payload?.imageFile) formData.append("image", payload.imageFile);
+        if (payload?.agenda != null) {
+          formData.append("agenda", JSON.stringify(payload.agenda));
+        }
+
+        return {
+          url: `api/communities/${communityId}/events/${eventId}`,
+          method: "PATCH",
           body: formData,
         };
       },
@@ -292,8 +333,10 @@ export const {
   useListCommentsQuery,
   useCreateCommentMutation,
   useListEventsQuery,
+  useMyEventsQuery,
   useLazyGetEventOwnerDetailQuery,
   useCreateEventMutation,
+  useUpdateEventMutation,
   useRsvpMutation,
   useVolunteerMutation,
 } = api;

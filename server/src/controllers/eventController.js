@@ -12,6 +12,33 @@ async function requireApprovedMember(userId, communityId) {
   return { ok: true };
 }
 
+async function listMyEvents(req, res) {
+  const userId = req.auth.sub;
+  const memberships = await Membership.find({ user: userId, status: 'approved' })
+    .select('community')
+    .lean();
+  const communityIds = [...new Set(memberships.map((m) => m.community).filter(Boolean).map(String))];
+  if (communityIds.length === 0) {
+    return res.json({ created: [], attending: [], volunteering: [] });
+  }
+
+  const inCommunities = { community: { $in: communityIds } };
+  const populate = [
+    { path: 'community', select: 'name' },
+    { path: 'createdBy', select: 'name' },
+    { path: 'attendees', select: 'name' },
+    { path: 'volunteers', select: 'name' },
+  ];
+
+  const [created, attending, volunteering] = await Promise.all([
+    Event.find({ ...inCommunities, createdBy: userId }).sort({ date: 1 }).limit(200).populate(populate),
+    Event.find({ ...inCommunities, attendees: userId }).sort({ date: 1 }).limit(200).populate(populate),
+    Event.find({ ...inCommunities, volunteers: userId }).sort({ date: 1 }).limit(200).populate(populate),
+  ]);
+
+  return res.json({ created, attending, volunteering });
+}
+
 async function listCommunityEvents(req, res) {
   const { communityId } = req.params;
   const auth = await requireApprovedMember(req.auth.sub, communityId);
@@ -133,6 +160,95 @@ async function createEvent(req, res) {
   return res.status(201).json({ event });
 }
 
+async function updateEvent(req, res) {
+  const { communityId, eventId } = req.params;
+  const auth = await requireApprovedMember(req.auth.sub, communityId);
+  if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
+
+  const event = await Event.findOne({ _id: eventId, community: communityId });
+  if (!event) return res.status(404).json({ message: 'Event not found' });
+
+  if (String(event.createdBy) !== String(req.auth.sub)) {
+    return res.status(403).json({ message: 'Only the event owner can edit this event' });
+  }
+
+  if (new Date(event.date).getTime() < Date.now()) {
+    return res.status(403).json({ message: 'Past events cannot be edited' });
+  }
+
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+
+  const agenda =
+    parsed.data.agenda && parsed.data.agenda.items?.length
+      ? {
+          startOffsetMinutes: parsed.data.agenda.startOffsetMinutes ?? 0,
+          items: parsed.data.agenda.items.map((it) => ({
+            title: it.title ?? '',
+            durationMinutes: it.durationMinutes,
+            gapBeforeMinutes: it.gapBeforeMinutes ?? 0,
+          })),
+        }
+      : undefined;
+
+  let imageUrl = event.imageUrl || '';
+  if (req.file) {
+    imageUrl = `/uploads/${req.file.filename}`;
+  } else if (req.body.imageUrl !== undefined && req.body.imageUrl !== '') {
+    imageUrl = String(req.body.imageUrl);
+  }
+
+  if (parsed.data.date.getTime() < Date.now()) {
+    return res.status(400).json({ message: 'Event start date and time must be in the future' });
+  }
+
+  const $set = {
+    title: parsed.data.title,
+    description: parsed.data.description,
+    whoFor: parsed.data.whoFor ?? '',
+    whatToBring: parsed.data.whatToBring ?? '',
+    volunteerRequirements: parsed.data.volunteerRequirements ?? '',
+    date: parsed.data.date,
+    venue: parsed.data.venue,
+    capacity: parsed.data.capacity,
+    imageUrl,
+  };
+
+  const $unset = {};
+
+  if (parsed.data.endDate !== undefined) {
+    $set.endDate = parsed.data.endDate;
+  } else {
+    $unset.endDate = '';
+  }
+
+  if (parsed.data.latitude !== undefined && parsed.data.longitude !== undefined) {
+    $set.location = { lat: parsed.data.latitude, lng: parsed.data.longitude };
+  } else {
+    $unset.location = '';
+  }
+
+  if (agenda) {
+    $set.agenda = agenda;
+  } else {
+    $unset.agenda = '';
+  }
+
+  const update = Object.keys($unset).length ? { $set, $unset } : { $set };
+
+  const populated = await Event.findOneAndUpdate({ _id: eventId, community: communityId }, update, {
+    new: true,
+    runValidators: true,
+  })
+    .populate('createdBy', 'name')
+    .populate('attendees', 'name')
+    .populate('volunteers', 'name');
+
+  if (!populated) return res.status(404).json({ message: 'Event not found' });
+
+  return res.json({ event: populated });
+}
+
 async function rsvp(req, res) {
   const { communityId, eventId } = req.params;
   const auth = await requireApprovedMember(req.auth.sub, communityId);
@@ -208,4 +324,12 @@ async function getEventOwnerDetails(req, res) {
   });
 }
 
-module.exports = { listCommunityEvents, createEvent, rsvp, volunteer, getEventOwnerDetails };
+module.exports = {
+  listMyEvents,
+  listCommunityEvents,
+  createEvent,
+  updateEvent,
+  rsvp,
+  volunteer,
+  getEventOwnerDetails,
+};

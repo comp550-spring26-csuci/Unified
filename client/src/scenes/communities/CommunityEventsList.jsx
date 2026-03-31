@@ -3,11 +3,13 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   List,
   ListItem,
   ListItemText,
@@ -29,6 +31,7 @@ import {
   VolunteerActivismOutlined,
 } from "@mui/icons-material";
 import { useState } from "react";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   useLazyGetEventOwnerDetailQuery,
   useRsvpMutation,
@@ -47,23 +50,47 @@ import {
 
 export default function CommunityEventsList({
   communityId,
+  communityIdForEvent,
   events,
   eventsError,
   isCommunityOwner,
   userId,
   emptyMessage,
+  showEventEdit = true,
+  showCommunityLink = false,
 }) {
   const [attendeeDialogEventId, setAttendeeDialogEventId] = useState(null);
   const [volunteerDialogEventId, setVolunteerDialogEventId] = useState(null);
+  const [volunteerSignupEventId, setVolunteerSignupEventId] = useState(null);
+  const [volunteerSignupAccepted, setVolunteerSignupAccepted] = useState(false);
   const [mapDialogEventId, setMapDialogEventId] = useState(null);
   const [eventDetailsDialogId, setEventDetailsDialogId] = useState(null);
   const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
   const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
+  const navigate = useNavigate();
 
   const [rsvp] = useRsvpMutation();
   const [volunteer] = useVolunteerMutation();
 
   const findEvent = (id) => events.find((e) => e._id === id);
+
+  const resolveCommunityId = (ev) => {
+    if (typeof communityIdForEvent === "function") {
+      const id = communityIdForEvent(ev);
+      if (id != null && id !== "") return String(id);
+    }
+    if (communityId != null && communityId !== "") return String(communityId);
+    return "";
+  };
+
+  const userIsVolunteer = (ev) =>
+    !!userId &&
+    (ev.volunteers || []).some((v) => normalizeId(v) === userId);
+
+  const closeVolunteerSignupDialog = () => {
+    setVolunteerSignupEventId(null);
+    setVolunteerSignupAccepted(false);
+  };
 
   return (
     <>
@@ -102,10 +129,29 @@ export default function CommunityEventsList({
                 <Stack
                   direction="row"
                   justifyContent="space-between"
-                  alignItems="center"
+                  alignItems="flex-start"
                   mb={1}
                 >
-                  <Typography fontWeight={700}>{ev.title}</Typography>
+                  <Box minWidth={0}>
+                    <Typography fontWeight={700}>{ev.title}</Typography>
+                    {showCommunityLink &&
+                    resolveCommunityId(ev) &&
+                    (typeof ev.community === "object"
+                      ? ev.community?.name
+                      : null) ? (
+                      <Typography
+                        variant="caption"
+                        component={RouterLink}
+                        to={`/communities/${resolveCommunityId(ev)}`}
+                        color="primary"
+                        sx={{ display: "block", mt: 0.25 }}
+                      >
+                        {typeof ev.community === "object"
+                          ? ev.community?.name || "Community"
+                          : "Community"}
+                      </Typography>
+                    ) : null}
+                  </Box>
                   <Typography variant="caption" color="text.secondary">
                     Event
                   </Typography>
@@ -113,86 +159,155 @@ export default function CommunityEventsList({
                 {ev.description ? (
                   <Typography mt={1}>{ev.description}</Typography>
                 ) : null}
-                <Stack spacing={0.8} mt={1.2}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <PersonOutlined sx={{ fontSize: 18, color: "text.secondary" }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Owner:
-                    </Typography>
-                    {isCommunityOwner ? (
-                      <Button
-                        size="small"
-                        variant="text"
-                        sx={{ textTransform: "none", p: 0, minWidth: 0 }}
-                        onClick={() => {
-                          setOwnerDetailEvent(ev);
-                          fetchEventOwnerDetail({
-                            communityId,
-                            eventId: ev._id,
-                          });
+                <Stack spacing={0.65} mt={1.2}>
+                  <Stack
+                    direction="row"
+                    flexWrap="wrap"
+                    alignItems="center"
+                    useFlexGap
+                    spacing={1.25}
+                    sx={{ rowGap: 0.5, columnGap: 1.75 }}
+                  >
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        minWidth: 0,
+                      }}
+                    >
+                      <PersonOutlined
+                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                      />
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ flexShrink: 0 }}
+                      >
+                        Owner:
+                      </Typography>
+                      {isCommunityOwner ? (
+                        <Button
+                          size="small"
+                          variant="text"
+                          sx={{ textTransform: "none", p: 0, minWidth: 0 }}
+                          onClick={() => {
+                            setOwnerDetailEvent(ev);
+                            fetchEventOwnerDetail({
+                              communityId: resolveCommunityId(ev),
+                              eventId: ev._id,
+                            });
+                          }}
+                        >
+                          {ev.createdBy?.name ?? "Unknown"}
+                        </Button>
+                      ) : (
+                        <Typography variant="body2" fontWeight={600} noWrap sx={{ minWidth: 0 }}>
+                          {ev.createdBy?.name ?? "Unknown"}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        flexWrap: "wrap",
+                        minWidth: 0,
+                      }}
+                    >
+                      <AccessTimeOutlined
+                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Date &amp; time:
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {new Date(ev.date).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    {ev.endDate ? (
+                      <Box
+                        sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 0.5,
+                          flexWrap: "wrap",
+                          minWidth: 0,
                         }}
                       >
-                        {ev.createdBy?.name ?? "Unknown"}
-                      </Button>
-                    ) : (
-                      <Typography variant="body2" fontWeight={600}>
-                        {ev.createdBy?.name ?? "Unknown"}
-                      </Typography>
-                    )}
-                  </Stack>
-                  <MetaRow
-                    icon={
-                      <AccessTimeOutlined
-                        sx={{ fontSize: 18, color: "text.secondary" }}
-                      />
-                    }
-                    label="Date & Time"
-                    value={new Date(ev.date).toLocaleString()}
-                  />
-                  {ev.endDate ? (
-                    <MetaRow
-                      icon={
                         <AccessTimeOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
+                          sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
                         />
-                      }
-                      label="Ends"
-                      value={new Date(ev.endDate).toLocaleString()}
-                    />
-                  ) : null}
-                  <MetaRow
-                    icon={
+                        <Typography variant="body2" color="text.secondary">
+                          Ends:
+                        </Typography>
+                        <Typography variant="body2" fontWeight={600}>
+                          {new Date(ev.endDate).toLocaleString()}
+                        </Typography>
+                      </Box>
+                    ) : null}
+                  </Stack>
+                  <Stack
+                    direction="row"
+                    flexWrap="wrap"
+                    alignItems="center"
+                    useFlexGap
+                    spacing={1.25}
+                    sx={{ rowGap: 0.5, columnGap: 1.75 }}
+                  >
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        minWidth: 0,
+                        maxWidth: "100%",
+                      }}
+                    >
                       <LocationOnOutlined
-                        sx={{ fontSize: 18, color: "text.secondary" }}
+                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
                       />
-                    }
-                    label="Venue"
-                    value={ev.venue || "TBA"}
-                  />
-                  <MetaRow
-                    icon={
+                      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+                        Venue:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        sx={{ wordBreak: "break-word" }}
+                      >
+                        {ev.venue || "TBA"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                       <GroupsOutlined
-                        sx={{ fontSize: 18, color: "text.secondary" }}
+                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
                       />
-                    }
-                    label="Attendees"
-                    value={`${ev.attendees?.length || 0}${ev.capacity > 0 ? ` / ${ev.capacity}` : ""}`}
-                  />
-                  <MetaRow
-                    icon={
+                      <Typography variant="body2" color="text.secondary">
+                        Attendees:
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {`${ev.attendees?.length || 0}${ev.capacity > 0 ? ` / ${ev.capacity}` : ""}`}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                       <VolunteerActivismOutlined
-                        sx={{ fontSize: 18, color: "text.secondary" }}
+                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
                       />
-                    }
-                    label="Volunteers"
-                    value={String(ev.volunteers?.length || 0)}
-                  />
-                  {Number.isFinite(ev?.location?.lat) &&
-                  Number.isFinite(ev?.location?.lng) ? (
-                    <Typography variant="caption" color="text.secondary">
-                      Map pin available for this event.
-                    </Typography>
-                  ) : null}
+                      <Typography variant="body2" color="text.secondary">
+                        Volunteers:
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {String(ev.volunteers?.length || 0)}
+                      </Typography>
+                    </Box>
+                    {Number.isFinite(ev?.location?.lat) &&
+                    Number.isFinite(ev?.location?.lng) ? (
+                      <Typography variant="caption" color="text.secondary">
+                        Map pin available
+                      </Typography>
+                    ) : null}
+                  </Stack>
                 </Stack>
                 <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
                   <Button
@@ -202,6 +317,19 @@ export default function CommunityEventsList({
                   >
                     Details
                   </Button>
+                  {showEventEdit && normalizeId(ev.createdBy) === userId ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        navigate(
+                          `/communities/${resolveCommunityId(ev)}?tab=4&editEvent=${ev._id}`,
+                        )
+                      }
+                    >
+                      Edit
+                    </Button>
+                  ) : null}
                   {normalizeId(ev.createdBy) === userId ? (
                     <Button
                       size="small"
@@ -217,7 +345,7 @@ export default function CommunityEventsList({
                       onClick={async () => {
                         try {
                           await rsvp({
-                            communityId,
+                            communityId: resolveCommunityId(ev),
                             eventId: ev._id,
                           }).unwrap();
                           toast.success("RSVP updated");
@@ -244,20 +372,25 @@ export default function CommunityEventsList({
                       size="small"
                       variant="outlined"
                       onClick={async () => {
-                        try {
-                          await volunteer({
-                            communityId,
-                            eventId: ev._id,
-                          }).unwrap();
-                          toast.success("Volunteer status updated");
-                        } catch (err) {
-                          toast.error(
-                            getApiErrorMessage(
-                              err,
-                              "Failed to update volunteer status",
-                            ),
-                          );
+                        if (userIsVolunteer(ev)) {
+                          try {
+                            await volunteer({
+                              communityId: resolveCommunityId(ev),
+                              eventId: ev._id,
+                            }).unwrap();
+                            toast.success("Volunteer status updated");
+                          } catch (err) {
+                            toast.error(
+                              getApiErrorMessage(
+                                err,
+                                "Failed to update volunteer status",
+                              ),
+                            );
+                          }
+                          return;
                         }
+                        setVolunteerSignupAccepted(false);
+                        setVolunteerSignupEventId(ev._id);
                       }}
                     >
                       Volunteer ({ev.volunteers?.length || 0})
@@ -653,6 +786,102 @@ export default function CommunityEventsList({
             );
           })()}
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!volunteerSignupEventId}
+        onClose={closeVolunteerSignupDialog}
+        maxWidth="sm"
+        fullWidth
+        scroll="paper"
+      >
+        <DialogTitle>Volunteer for this event</DialogTitle>
+        <DialogContent dividers>
+          {(() => {
+            const evSignup = findEvent(volunteerSignupEventId);
+            if (!evSignup) {
+              return (
+                <Typography color="text.secondary">Event not found.</Typography>
+              );
+            }
+            const reqText = evSignup.volunteerRequirements?.trim();
+            return (
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  Review the organizer's expectations before you sign up.
+                </Typography>
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    Volunteer requirements
+                  </Typography>
+                  {reqText ? (
+                    <Typography
+                      variant="body2"
+                      sx={{ whiteSpace: "pre-wrap" }}
+                    >
+                      {reqText}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No specific requirements were added for this event. By
+                      volunteering, you agree to help as needed and follow
+                      guidance from the event organizer.
+                    </Typography>
+                  )}
+                </Box>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={volunteerSignupAccepted}
+                      onChange={(e) =>
+                        setVolunteerSignupAccepted(e.target.checked)
+                      }
+                      color="primary"
+                    />
+                  }
+                  label={
+                    reqText
+                      ? "I have read and accept these volunteer requirements."
+                      : "I have read the information above and agree to volunteer."
+                  }
+                />
+              </Stack>
+            );
+          })()}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeVolunteerSignupDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!volunteerSignupAccepted}
+            onClick={async () => {
+              if (!volunteerSignupEventId || !volunteerSignupAccepted) return;
+              const evSignup = findEvent(volunteerSignupEventId);
+              const cid = evSignup ? resolveCommunityId(evSignup) : "";
+              if (!cid) {
+                toast.error("Could not determine community for this event.");
+                return;
+              }
+              try {
+                await volunteer({
+                  communityId: cid,
+                  eventId: volunteerSignupEventId,
+                }).unwrap();
+                toast.success("You're signed up as a volunteer");
+                closeVolunteerSignupDialog();
+              } catch (err) {
+                toast.error(
+                  getApiErrorMessage(
+                    err,
+                    "Failed to update volunteer status",
+                  ),
+                );
+              }
+            }}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog

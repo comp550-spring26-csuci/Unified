@@ -16,6 +16,8 @@ import CommunityDetail from "@scenes/communities/CommunityDetail";
 import CommunityPastEvents from "@scenes/communities/CommunityPastEvents";
 import MyCommunities from "@scenes/communities/MyCommunities";
 import MembershipRequests from "@scenes/communities/MembershipRequests";
+import MyEvents from "@scenes/communities/MyEvents";
+import MyPastEvents from "@scenes/communities/MyPastEvents";
 import Profile from "@scenes/profile/Profile";
 import CommunityApprovals from "@scenes/admin/CommunityApprovals";
 import MembershipApprovals from "@scenes/admin/MembershipApprovals";
@@ -55,6 +57,14 @@ function App() {
               <Route
                 path="/my-communities"
                 element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <MyCommunities />}
+              />
+              <Route
+                path="/my-events"
+                element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <MyEvents />}
+              />
+              <Route
+                path="/my-events/past"
+                element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <MyPastEvents />}
               />
               <Route
                 path="/membership-requests"
