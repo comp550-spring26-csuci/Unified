@@ -156,27 +156,35 @@ const Sidebar = ({
             },
           }}
         >
-          <Box width="100%">
-            {/* TOP BRAND AREA */}
-            <Box m="1.5rem 2rem 1.25rem 2rem">
-              <FlexBetween>
-                <UnifiedBrand
-                  variant="sidebar"
-                  onClick={() => navigate("/dashboard")}
-                />
+          <Box
+            width="100%"
+            height="100%"
+            sx={{ display: "flex", flexDirection: "column" }}
+          >
+            <Box>
+              {/* TOP BRAND AREA */}
+              <Box m="1.5rem 2rem 1.25rem 2rem">
+                <FlexBetween>
+                  <UnifiedBrand
+                    variant="sidebar"
+                    onClick={() => navigate("/dashboard")}
+                  />
 
-                {!isNonMobile && (
-                  <IconButton onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-                    <ChevronLeft />
-                  </IconButton>
-                )}
-              </FlexBetween>
+                  {!isNonMobile && (
+                    <IconButton
+                      onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    >
+                      <ChevronLeft />
+                    </IconButton>
+                  )}
+                </FlexBetween>
+              </Box>
+
+              <Divider />
             </Box>
 
-            <Divider />
-
             {/* NAV ITEMS */}
-            <List>
+            <List sx={{ flex: 1, overflowY: "auto" }}>
               {navItems.map(({ text, icon, path }) => {
                 const key = path.split("/")[1] || "dashboard";
                 const isActive = active === key || pathname === path;
@@ -231,32 +239,38 @@ const Sidebar = ({
                 );
               })}
             </List>
-          </Box>
 
-          {/* BOTTOM USER INFO */}
-          <Box position="absolute" bottom="1.25rem" width="100%">
-            <Divider />
-            <Box px={2} pt={1.25} display="flex" alignItems="center" gap={1.25}>
-              <Avatar
-                src={toAbsoluteMediaUrl(user?.avatarUrl || "") || undefined}
-                alt={user?.name || "User"}
-                sx={{ width: 38, height: 38, fontSize: "0.95rem" }}
+            {/* BOTTOM USER INFO */}
+            <Box sx={{ mt: "auto", pb: 1.25 }}>
+              <Divider />
+              <Box
+                px={2}
+                pt={1.25}
+                display="flex"
+                alignItems="center"
+                gap={1.25}
               >
-                {(user?.name || "U").charAt(0).toUpperCase()}
-              </Avatar>
-              <Box>
-                <Typography
-                  fontWeight={800}
-                  sx={{ color: theme.palette.text.primary }}
+                <Avatar
+                  src={toAbsoluteMediaUrl(user?.avatarUrl || "") || undefined}
+                  alt={user?.name || "User"}
+                  sx={{ width: 38, height: 38, fontSize: "0.95rem" }}
                 >
-                  {user?.name || ""}
-                </Typography>
-                <Typography
-                  fontSize="0.85rem"
-                  sx={{ color: theme.palette.text.secondary }}
-                >
-                  {user?.role || ""}
-                </Typography>
+                  {(user?.name || "U").charAt(0).toUpperCase()}
+                </Avatar>
+                <Box>
+                  <Typography
+                    fontWeight={800}
+                    sx={{ color: theme.palette.text.primary }}
+                  >
+                    {user?.name || ""}
+                  </Typography>
+                  <Typography
+                    fontSize="0.85rem"
+                    sx={{ color: theme.palette.text.secondary }}
+                  >
+                    {user?.role || ""}
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           </Box>
