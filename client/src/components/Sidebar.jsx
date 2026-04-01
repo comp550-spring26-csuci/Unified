@@ -163,7 +163,14 @@ const Sidebar = ({
           >
             <Box>
               {/* TOP BRAND AREA */}
-              <Box m="1.5rem 2rem 1.25rem 2rem">
+              <Box
+                sx={{
+                  height: 64,
+                  px: 2,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
                 <FlexBetween>
                   <UnifiedBrand
                     variant="sidebar"
