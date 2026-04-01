@@ -23,6 +23,14 @@ async function listCommunityPosts(req, res) {
 
   const posts = await Post.find({ community: communityId })
     .populate('author', 'name email avatarUrl')
+    .populate({
+      path: 'event',
+      populate: [
+        { path: 'createdBy', select: 'name' },
+        { path: 'attendees', select: 'name' },
+        { path: 'volunteers', select: 'name' },
+      ],
+    })
     .sort({ createdAt: -1 })
     .limit(200);
   return res.json({ posts });

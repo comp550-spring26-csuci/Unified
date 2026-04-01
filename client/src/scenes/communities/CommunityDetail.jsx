@@ -51,6 +51,8 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
 import CommunityEventsList from "./CommunityEventsList";
+import EventDetailsDialog from "./EventDetailsDialog";
+import EventRsvpVolunteerActions from "./EventRsvpVolunteerActions";
 import {
   computeAgendaSlots,
   filterEventsUpcoming,
@@ -81,7 +83,7 @@ function newAgendaRow() {
   };
 }
 
-function PostCard({ post, communityId, onLike }) {
+function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [createComment] = useCreateCommentMutation();
@@ -107,7 +109,16 @@ function PostCard({ post, communityId, onLike }) {
       </Stack>
       <Typography whiteSpace="pre-wrap">{post.text}</Typography>
 
-      <Stack direction="row" spacing={1} mt={1} mb={1}>
+      <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
+        {post.event?._id && onOpenEventDetail ? (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onOpenEventDetail(post.event)}
+          >
+            Details
+          </Button>
+        ) : null}
         <Button
           size="small"
           variant="outlined"
@@ -130,6 +141,12 @@ function PostCard({ post, communityId, onLike }) {
           {commentsOpen ? "Hide Comments" : "Show Comments"}
         </Button>
       </Stack>
+
+      {post.event?._id ? (
+        <Box mt={1}>
+          <EventRsvpVolunteerActions ev={post.event} communityId={communityId} />
+        </Box>
+      ) : null}
 
       {commentsOpen ? (
         <Box mt={1}>
@@ -225,6 +242,7 @@ export default function CommunityDetail() {
     useUpdateCommunityMemberRoleMutation();
 
   const [postText, setPostText] = useState("");
+  const [postEventDetail, setPostEventDetail] = useState(null);
 
   const [eventTitle, setEventTitle] = useState("");
   const [eventDescription, setEventDescription] = useState("");
@@ -766,6 +784,7 @@ export default function CommunityDetail() {
                 post={p}
                 communityId={communityId}
                 onLike={likePost}
+                onOpenEventDetail={setPostEventDetail}
               />
             ))}
           </Stack>
@@ -1666,6 +1685,12 @@ export default function CommunityDetail() {
           </Box>
         </TabPanel>
       </Box>
+
+      <EventDetailsDialog
+        open={!!postEventDetail}
+        onClose={() => setPostEventDetail(null)}
+        evDetail={postEventDetail}
+      />
     </Box>
   );
 }

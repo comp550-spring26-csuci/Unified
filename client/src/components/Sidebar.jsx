@@ -19,6 +19,7 @@ import {
   ChevronRightOutlined,
   EventAvailableOutlined,
   HomeOutlined,
+  VolunteerActivismOutlined,
   Groups2Outlined,
   AdminPanelSettingsOutlined,
   HowToRegOutlined,
@@ -94,6 +95,11 @@ const Sidebar = ({
           text: "Events",
           path: "/my-events",
           icon: <EventAvailableOutlined />,
+        },
+        {
+          text: "Volunteer opportunities",
+          path: "/volunteer-opportunities",
+          icon: <VolunteerActivismOutlined />,
         },
       );
     }

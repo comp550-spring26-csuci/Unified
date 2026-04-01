@@ -3,23 +3,13 @@ import {
   Avatar,
   Box,
   Button,
-  Checkbox,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  FormControlLabel,
   List,
   ListItem,
   ListItemText,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
 } from "@mui/material";
 import { GoogleMapViewer } from "@components/GoogleMapField";
@@ -32,21 +22,10 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import {
-  useLazyGetEventOwnerDetailQuery,
-  useRsvpMutation,
-  useVolunteerMutation,
-} from "@state/api";
-import { toast } from "react-toastify";
-import { getApiErrorMessage } from "../../utils/apiError";
-import {
-  computeAgendaSlots,
-  formatAgendaClock,
-  MetaRow,
-  normalizeId,
-  toAbsoluteMediaUrl,
-  toDateTimeLocalFromDate,
-} from "./communityEventShared";
+import { useLazyGetEventOwnerDetailQuery } from "@state/api";
+import EventDetailsDialog from "./EventDetailsDialog";
+import EventRsvpVolunteerActions from "./EventRsvpVolunteerActions";
+import { normalizeId, toAbsoluteMediaUrl } from "./communityEventShared";
 
 export default function CommunityEventsList({
   communityId,
@@ -59,18 +38,11 @@ export default function CommunityEventsList({
   showEventEdit = true,
   showCommunityLink = false,
 }) {
-  const [attendeeDialogEventId, setAttendeeDialogEventId] = useState(null);
-  const [volunteerDialogEventId, setVolunteerDialogEventId] = useState(null);
-  const [volunteerSignupEventId, setVolunteerSignupEventId] = useState(null);
-  const [volunteerSignupAccepted, setVolunteerSignupAccepted] = useState(false);
   const [mapDialogEventId, setMapDialogEventId] = useState(null);
   const [eventDetailsDialogId, setEventDetailsDialogId] = useState(null);
   const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
   const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
   const navigate = useNavigate();
-
-  const [rsvp] = useRsvpMutation();
-  const [volunteer] = useVolunteerMutation();
 
   const findEvent = (id) => events.find((e) => e._id === id);
 
@@ -81,15 +53,6 @@ export default function CommunityEventsList({
     }
     if (communityId != null && communityId !== "") return String(communityId);
     return "";
-  };
-
-  const userIsVolunteer = (ev) =>
-    !!userId &&
-    (ev.volunteers || []).some((v) => normalizeId(v) === userId);
-
-  const closeVolunteerSignupDialog = () => {
-    setVolunteerSignupEventId(null);
-    setVolunteerSignupAccepted(false);
   };
 
   return (
@@ -330,72 +293,10 @@ export default function CommunityEventsList({
                       Edit
                     </Button>
                   ) : null}
-                  {normalizeId(ev.createdBy) === userId ? (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => setAttendeeDialogEventId(ev._id)}
-                    >
-                      RSVP ({ev.attendees?.length || 0})
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={async () => {
-                        try {
-                          await rsvp({
-                            communityId: resolveCommunityId(ev),
-                            eventId: ev._id,
-                          }).unwrap();
-                          toast.success("RSVP updated");
-                        } catch (err) {
-                          toast.error(
-                            getApiErrorMessage(err, "Failed to update RSVP"),
-                          );
-                        }
-                      }}
-                    >
-                      RSVP ({ev.attendees?.length || 0})
-                    </Button>
-                  )}
-                  {normalizeId(ev.createdBy) === userId ? (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => setVolunteerDialogEventId(ev._id)}
-                    >
-                      Volunteer ({ev.volunteers?.length || 0})
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={async () => {
-                        if (userIsVolunteer(ev)) {
-                          try {
-                            await volunteer({
-                              communityId: resolveCommunityId(ev),
-                              eventId: ev._id,
-                            }).unwrap();
-                            toast.success("Volunteer status updated");
-                          } catch (err) {
-                            toast.error(
-                              getApiErrorMessage(
-                                err,
-                                "Failed to update volunteer status",
-                              ),
-                            );
-                          }
-                          return;
-                        }
-                        setVolunteerSignupAccepted(false);
-                        setVolunteerSignupEventId(ev._id);
-                      }}
-                    >
-                      Volunteer ({ev.volunteers?.length || 0})
-                    </Button>
-                  )}
+                  <EventRsvpVolunteerActions
+                    ev={ev}
+                    communityId={resolveCommunityId(ev)}
+                  />
                   {Number.isFinite(ev?.location?.lat) &&
                   Number.isFinite(ev?.location?.lng) ? (
                     <Button
@@ -413,476 +314,11 @@ export default function CommunityEventsList({
         ))}
       </Stack>
 
-      <Dialog
-        open={!!attendeeDialogEventId}
-        onClose={() => setAttendeeDialogEventId(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Attendees</DialogTitle>
-        <DialogContent>
-          {(() => {
-            const event = findEvent(attendeeDialogEventId);
-            const attendees = event?.attendees || [];
-            if (attendees.length === 0) {
-              return (
-                <Typography color="text.secondary">
-                  No one has RSVP'd yet.
-                </Typography>
-              );
-            }
-            return (
-              <List dense disablePadding>
-                {attendees.map((a) => (
-                  <ListItem key={a._id || a} disablePadding sx={{ py: 0.5 }}>
-                    <ListItemText
-                      primary={
-                        typeof a === "object" ? a?.name ?? "Unknown" : "Unknown"
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
+      <EventDetailsDialog
         open={!!eventDetailsDialogId}
         onClose={() => setEventDetailsDialogId(null)}
-        maxWidth="md"
-        fullWidth
-        scroll="paper"
-      >
-        <DialogTitle>
-          {findEvent(eventDetailsDialogId)?.title ?? "Event details"}
-        </DialogTitle>
-        <DialogContent dividers>
-          {(() => {
-            const evDetail = findEvent(eventDetailsDialogId);
-            if (!evDetail) {
-              return (
-                <Typography color="text.secondary">Event not found.</Typography>
-              );
-            }
-            const dtLocal = toDateTimeLocalFromDate(evDetail.date);
-            const agendaItems = evDetail.agenda?.items || [];
-            const agendaSlots =
-              agendaItems.length > 0 && dtLocal
-                ? computeAgendaSlots(
-                    dtLocal,
-                    evDetail.agenda?.startOffsetMinutes ?? 0,
-                    agendaItems,
-                  )
-                : [];
-
-            return (
-              <Stack spacing={2}>
-                {evDetail.imageUrl ? (
-                  <Box
-                    component="img"
-                    src={toAbsoluteMediaUrl(evDetail.imageUrl)}
-                    alt={evDetail.title}
-                    sx={{
-                      width: "100%",
-                      maxHeight: 280,
-                      objectFit: "cover",
-                      borderRadius: 1,
-                      border: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  />
-                ) : null}
-
-                {evDetail.description ? (
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">
-                      Description
-                    </Typography>
-                    <Typography whiteSpace="pre-wrap" sx={{ mt: 0.5 }}>
-                      {evDetail.description}
-                    </Typography>
-                  </Box>
-                ) : null}
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                    Event information
-                  </Typography>
-                  <Stack spacing={1.25}>
-                    <MetaRow
-                      icon={
-                        <PersonOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Owner"
-                      value={evDetail.createdBy?.name ?? "Unknown"}
-                    />
-                    <MetaRow
-                      icon={
-                        <AccessTimeOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Date & time"
-                      value={new Date(evDetail.date).toLocaleString()}
-                    />
-                    {evDetail.endDate ? (
-                      <MetaRow
-                        icon={
-                          <AccessTimeOutlined
-                            sx={{ fontSize: 18, color: "text.secondary" }}
-                          />
-                        }
-                        label="End date & time"
-                        value={new Date(evDetail.endDate).toLocaleString()}
-                      />
-                    ) : null}
-                    <MetaRow
-                      icon={
-                        <LocationOnOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Venue"
-                      value={evDetail.venue || "—"}
-                    />
-                    <MetaRow
-                      icon={
-                        <GroupsOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Capacity"
-                      value={
-                        evDetail.capacity > 0
-                          ? String(evDetail.capacity)
-                          : "Unlimited"
-                      }
-                    />
-                    <MetaRow
-                      icon={
-                        <GroupsOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Attendees"
-                      value={`${evDetail.attendees?.length || 0}${evDetail.capacity > 0 ? ` / ${evDetail.capacity}` : ""}`}
-                    />
-                    <MetaRow
-                      icon={
-                        <VolunteerActivismOutlined
-                          sx={{ fontSize: 18, color: "text.secondary" }}
-                        />
-                      }
-                      label="Volunteers"
-                      value={String(evDetail.volunteers?.length || 0)}
-                    />
-                  </Stack>
-                </Box>
-
-                {evDetail.whoFor?.trim() ? (
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} mb={0.75}>
-                      Who this event is for
-                    </Typography>
-                    <Typography variant="body2" whiteSpace="pre-wrap">
-                      {evDetail.whoFor}
-                    </Typography>
-                  </Box>
-                ) : null}
-
-                {evDetail.whatToBring?.trim() ||
-                evDetail.volunteerRequirements?.trim() ? (
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                      Attendees and volunteers
-                    </Typography>
-                    <Stack spacing={1.5}>
-                      {evDetail.whatToBring?.trim() ? (
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            What to bring
-                          </Typography>
-                          <Typography whiteSpace="pre-wrap" sx={{ mt: 0.5 }}>
-                            {evDetail.whatToBring}
-                          </Typography>
-                        </Box>
-                      ) : null}
-                      {evDetail.volunteerRequirements?.trim() ? (
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Volunteer requirements
-                          </Typography>
-                          <Typography whiteSpace="pre-wrap" sx={{ mt: 0.5 }}>
-                            {evDetail.volunteerRequirements}
-                          </Typography>
-                        </Box>
-                      ) : null}
-                    </Stack>
-                  </Box>
-                ) : null}
-
-                {agendaItems.length > 0 ? (
-                  <>
-                    <Divider />
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                        Agenda
-                      </Typography>
-                      <TableContainer
-                        component={Box}
-                        sx={{
-                          borderRadius: 1,
-                          border: "1px solid",
-                          borderColor: "divider",
-                          bgcolor: "action.hover",
-                        }}
-                      >
-                        <Table size="small" aria-label="Event agenda">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell
-                                sx={{
-                                  fontWeight: 700,
-                                  color: "text.secondary",
-                                  borderBottomColor: "divider",
-                                }}
-                              >
-                                Topic
-                              </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{
-                                  fontWeight: 700,
-                                  color: "text.secondary",
-                                  width: 96,
-                                  whiteSpace: "nowrap",
-                                  borderBottomColor: "divider",
-                                }}
-                              >
-                                Start time
-                              </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{
-                                  fontWeight: 700,
-                                  color: "text.secondary",
-                                  width: 104,
-                                  whiteSpace: "nowrap",
-                                  borderBottomColor: "divider",
-                                }}
-                              >
-                                Duration
-                              </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{
-                                  fontWeight: 700,
-                                  color: "text.secondary",
-                                  width: 96,
-                                  whiteSpace: "nowrap",
-                                  borderBottomColor: "divider",
-                                }}
-                              >
-                                End time
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {agendaItems.map((item, idx) => {
-                              const slot = agendaSlots[idx];
-                              return (
-                                <TableRow
-                                  key={`${idx}-${item.title || "row"}`}
-                                  sx={{
-                                    "&:last-child td": { borderBottom: 0 },
-                                  }}
-                                >
-                                  <TableCell sx={{ verticalAlign: "top" }}>
-                                    {item.title?.trim()
-                                      ? item.title
-                                      : `Item ${idx + 1}`}
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {formatAgendaClock(slot?.start)}
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {item.durationMinutes} min
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {formatAgendaClock(slot?.end)}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </Box>
-                  </>
-                ) : null}
-
-                {Number.isFinite(evDetail?.location?.lat) &&
-                Number.isFinite(evDetail?.location?.lng) ? (
-                  <>
-                    <Divider />
-                    <Box>
-                      <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                        Location
-                      </Typography>
-                      <GoogleMapViewer
-                        value={{
-                          lat: evDetail.location.lat,
-                          lng: evDetail.location.lng,
-                        }}
-                      />
-                    </Box>
-                  </>
-                ) : null}
-              </Stack>
-            );
-          })()}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEventDetailsDialogId(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={!!volunteerDialogEventId}
-        onClose={() => setVolunteerDialogEventId(null)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Volunteers</DialogTitle>
-        <DialogContent>
-          {(() => {
-            const event = findEvent(volunteerDialogEventId);
-            const volunteers = event?.volunteers || [];
-            if (volunteers.length === 0) {
-              return (
-                <Typography color="text.secondary">
-                  No one has volunteered yet.
-                </Typography>
-              );
-            }
-            return (
-              <List dense disablePadding>
-                {volunteers.map((v) => (
-                  <ListItem key={v._id || v} disablePadding sx={{ py: 0.5 }}>
-                    <ListItemText
-                      primary={
-                        typeof v === "object" ? v?.name ?? "Unknown" : "Unknown"
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!volunteerSignupEventId}
-        onClose={closeVolunteerSignupDialog}
-        maxWidth="sm"
-        fullWidth
-        scroll="paper"
-      >
-        <DialogTitle>Volunteer for this event</DialogTitle>
-        <DialogContent dividers>
-          {(() => {
-            const evSignup = findEvent(volunteerSignupEventId);
-            if (!evSignup) {
-              return (
-                <Typography color="text.secondary">Event not found.</Typography>
-              );
-            }
-            const reqText = evSignup.volunteerRequirements?.trim();
-            return (
-              <Stack spacing={2}>
-                <Typography variant="body2" color="text.secondary">
-                  Review the organizer's expectations before you sign up.
-                </Typography>
-                <Box>
-                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    Volunteer requirements
-                  </Typography>
-                  {reqText ? (
-                    <Typography
-                      variant="body2"
-                      sx={{ whiteSpace: "pre-wrap" }}
-                    >
-                      {reqText}
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No specific requirements were added for this event. By
-                      volunteering, you agree to help as needed and follow
-                      guidance from the event organizer.
-                    </Typography>
-                  )}
-                </Box>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={volunteerSignupAccepted}
-                      onChange={(e) =>
-                        setVolunteerSignupAccepted(e.target.checked)
-                      }
-                      color="primary"
-                    />
-                  }
-                  label={
-                    reqText
-                      ? "I have read and accept these volunteer requirements."
-                      : "I have read the information above and agree to volunteer."
-                  }
-                />
-              </Stack>
-            );
-          })()}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={closeVolunteerSignupDialog}>Cancel</Button>
-          <Button
-            variant="contained"
-            disabled={!volunteerSignupAccepted}
-            onClick={async () => {
-              if (!volunteerSignupEventId || !volunteerSignupAccepted) return;
-              const evSignup = findEvent(volunteerSignupEventId);
-              const cid = evSignup ? resolveCommunityId(evSignup) : "";
-              if (!cid) {
-                toast.error("Could not determine community for this event.");
-                return;
-              }
-              try {
-                await volunteer({
-                  communityId: cid,
-                  eventId: volunteerSignupEventId,
-                }).unwrap();
-                toast.success("You're signed up as a volunteer");
-                closeVolunteerSignupDialog();
-              } catch (err) {
-                toast.error(
-                  getApiErrorMessage(
-                    err,
-                    "Failed to update volunteer status",
-                  ),
-                );
-              }
-            }}
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
+        evDetail={findEvent(eventDetailsDialogId)}
+      />
 
       <Dialog
         open={!!ownerDetailEvent}

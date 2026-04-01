@@ -23,6 +23,7 @@ export const api = createApi({
     "Comments",
     "Events",
     "Admin",
+    "DashboardActivity",
   ],
   endpoints: (build) => ({
     // Auth
@@ -51,6 +52,10 @@ export const api = createApi({
     me: build.query({
       query: (_token) => "api/auth/me",
       providesTags: ["Me"],
+    }),
+    myActivity: build.query({
+      query: () => "api/me/activity",
+      providesTags: ["DashboardActivity"],
     }),
     updateProfile: build.mutation({
       query: (payload) => {
@@ -89,7 +94,7 @@ export const api = createApi({
     }),
     createCommunity: build.mutation({
       query: (body) => ({ url: "api/communities", method: "POST", body }),
-      invalidatesTags: ["Communities", "Admin"],
+      invalidatesTags: ["Communities", "Admin", "DashboardActivity"],
     }),
     updateCommunityRules: build.mutation({
       query: ({ communityId, rules }) => ({
@@ -127,7 +132,7 @@ export const api = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Memberships"],
+      invalidatesTags: ["Memberships", "DashboardActivity"],
     }),
     myMemberships: build.query({
       query: () => "api/memberships/mine",
@@ -178,7 +183,7 @@ export const api = createApi({
         method: "POST",
         body: { text },
       }),
-      invalidatesTags: ["Posts"],
+      invalidatesTags: ["Posts", "DashboardActivity"],
     }),
     likePost: build.mutation({
       query: ({ communityId, postId }) => ({
@@ -198,7 +203,7 @@ export const api = createApi({
         method: "POST",
         body: { text },
       }),
-      invalidatesTags: ["Comments"],
+      invalidatesTags: ["Comments", "DashboardActivity"],
     }),
 
     // Events
@@ -208,6 +213,17 @@ export const api = createApi({
     }),
     myEvents: build.query({
       query: () => "api/me/events",
+      providesTags: ["Events"],
+    }),
+    volunteerOpportunities: build.query({
+      query: (arg = {}) => {
+        const params = {};
+        if (arg.q?.trim()) params.q = arg.q.trim();
+        if (arg.from?.trim()) params.from = arg.from.trim();
+        if (arg.to?.trim()) params.to = arg.to.trim();
+        if (arg.communityId?.trim()) params.communityId = arg.communityId.trim();
+        return { url: "api/me/volunteer-opportunities", params };
+      },
       providesTags: ["Events"],
     }),
     getEventOwnerDetail: build.query({
@@ -249,7 +265,7 @@ export const api = createApi({
           body: formData,
         };
       },
-      invalidatesTags: ["Events"],
+      invalidatesTags: ["Events", "Posts", "DashboardActivity"],
     }),
     updateEvent: build.mutation({
       query: ({ communityId, eventId, payload }) => {
@@ -293,14 +309,14 @@ export const api = createApi({
         url: `api/communities/${communityId}/events/${eventId}/rsvp`,
         method: "POST",
       }),
-      invalidatesTags: ["Events"],
+      invalidatesTags: ["Events", "Posts"],
     }),
     volunteer: build.mutation({
       query: ({ communityId, eventId }) => ({
         url: `api/communities/${communityId}/events/${eventId}/volunteer`,
         method: "POST",
       }),
-      invalidatesTags: ["Events"],
+      invalidatesTags: ["Events", "Posts"],
     }),
   }),
 });
@@ -311,6 +327,7 @@ export const {
   useForgotPasswordMutation,
   useResetPasswordWithOtpMutation,
   useMeQuery,
+  useMyActivityQuery,
   useUpdateProfileMutation,
   useListCommunitiesQuery,
   useMyCommunitiesQuery,
@@ -334,6 +351,7 @@ export const {
   useCreateCommentMutation,
   useListEventsQuery,
   useMyEventsQuery,
+  useVolunteerOpportunitiesQuery,
   useLazyGetEventOwnerDetailQuery,
   useCreateEventMutation,
   useUpdateEventMutation,

@@ -1,9 +1,12 @@
 const express = require('express');
 const { authRequired } = require('../middleware/auth');
-const { listMyEvents } = require('../controllers/eventController');
+const { listMyEvents, listVolunteerOpportunities } = require('../controllers/eventController');
+const { listMyRecentActivity } = require('../controllers/activityController');
 
 const router = express.Router();
 router.use(authRequired);
 router.get('/events', listMyEvents);
+router.get('/volunteer-opportunities', listVolunteerOpportunities);
+router.get('/activity', listMyRecentActivity);
 
 module.exports = router;
