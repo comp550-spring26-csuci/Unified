@@ -35,8 +35,12 @@ const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
   const navigate = useNavigate();
 
   const [anchorEl, setAnchorEl] = useState(null);
+  const [menuWidth, setMenuWidth] = useState(null);
   const isOpen = Boolean(anchorEl);
-  const handleClick = (event) => setAnchorEl(event.currentTarget);
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+    setMenuWidth(event.currentTarget.offsetWidth);
+  };
   const handleClose = () => setAnchorEl(null);
 
   const logout = () => {
@@ -140,6 +144,11 @@ const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
             onClose={handleClose}
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
+            PaperProps={{
+              sx: {
+                width: menuWidth || undefined,
+              },
+            }}
           >
             <MenuItem
               onClick={() => {
