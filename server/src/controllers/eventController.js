@@ -2,6 +2,52 @@ const { z } = require('zod');
 const Community = require('../models/Community');
 const Membership = require('../models/Membership');
 const Event = require('../models/Event');
+const Post = require('../models/Post');
+
+/** Community feed announcement for a new event (Post.text maxlength 5000). */
+function buildEventAnnouncementPostText(data, agendaItemCount = 0) {
+  const lines = [];
+  lines.push(`New event: ${data.title}`);
+  lines.push('');
+  lines.push(
+    `When: ${data.date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`,
+  );
+  if (data.endDate) {
+    lines.push(
+      `Ends: ${data.endDate.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`,
+    );
+  }
+  lines.push(`Where: ${data.venue}`);
+  if (data.capacity > 0) {
+    lines.push(`Capacity: ${data.capacity} attendees`);
+  }
+  const extras = [];
+  if (data.whoFor?.trim()) extras.push(`Who it's for: ${data.whoFor.trim()}`);
+  if (data.whatToBring?.trim()) extras.push(`What to bring: ${data.whatToBring.trim()}`);
+  if (data.volunteerRequirements?.trim()) {
+    extras.push(`Volunteer needs: ${data.volunteerRequirements.trim()}`);
+  }
+  if (extras.length) {
+    lines.push('');
+    lines.push(extras.join('\n\n'));
+  }
+  if (data.description?.trim()) {
+    lines.push('');
+    lines.push(data.description.trim());
+  }
+  if (agendaItemCount > 0) {
+    lines.push('');
+    lines.push(`Agenda: ${agendaItemCount} item(s). Open Events for the full schedule.`);
+  }
+  lines.push('');
+  lines.push('Open the Events tab in this community to RSVP, volunteer, or view full details.');
+
+  let text = lines.join('\n');
+  if (text.length > 5000) {
+    text = `${text.slice(0, 4994).trimEnd()}\n...`;
+  }
+  return text;
+}
 
 async function requireApprovedMember(userId, communityId) {
   const community = await Community.findById(communityId);
@@ -10,6 +56,94 @@ async function requireApprovedMember(userId, communityId) {
   const membership = await Membership.findOne({ user: userId, community: communityId, status: 'approved' });
   if (!membership) return { ok: false, status: 403, message: 'Membership required' };
   return { ok: true };
+}
+
+async function listMyEvents(req, res) {
+  const userId = req.auth.sub;
+  const memberships = await Membership.find({ user: userId, status: 'approved' })
+    .select('community')
+    .lean();
+  const communityIds = [...new Set(memberships.map((m) => m.community).filter(Boolean).map(String))];
+  if (communityIds.length === 0) {
+    return res.json({ created: [], attending: [], volunteering: [] });
+  }
+
+  const inCommunities = { community: { $in: communityIds } };
+  const populate = [
+    { path: 'community', select: 'name' },
+    { path: 'createdBy', select: 'name' },
+    { path: 'attendees', select: 'name' },
+    { path: 'volunteers', select: 'name' },
+  ];
+
+  const [created, attending, volunteering] = await Promise.all([
+    Event.find({ ...inCommunities, createdBy: userId }).sort({ date: 1 }).limit(200).populate(populate),
+    Event.find({ ...inCommunities, attendees: userId }).sort({ date: 1 }).limit(200).populate(populate),
+    Event.find({ ...inCommunities, volunteers: userId }).sort({ date: 1 }).limit(200).populate(populate),
+  ]);
+
+  return res.json({ created, attending, volunteering });
+}
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Upcoming events in member communities — for discovering volunteer sign-ups. */
+async function listVolunteerOpportunities(req, res) {
+  const userId = req.auth.sub;
+  const memberships = await Membership.find({ user: userId, status: 'approved' })
+    .select('community')
+    .lean();
+  let communityIds = [...new Set(memberships.map((m) => m.community).filter(Boolean).map(String))];
+  if (communityIds.length === 0) {
+    return res.json({ events: [] });
+  }
+
+  const { q, from, to, communityId } = req.query;
+  if (communityId && String(communityId).trim()) {
+    const cid = String(communityId).trim();
+    if (!communityIds.includes(cid)) {
+      return res.status(403).json({ message: 'Not a member of that community' });
+    }
+    communityIds = [cid];
+  }
+
+  const now = new Date();
+  const filter = {
+    community: { $in: communityIds },
+    date: { $gte: now },
+  };
+
+  if (from) {
+    const fromDate = new Date(from);
+    if (!Number.isNaN(fromDate.getTime())) {
+      filter.date = { ...filter.date, $gte: new Date(Math.max(now.getTime(), fromDate.getTime())) };
+    }
+  }
+  if (to) {
+    const toDate = new Date(to);
+    if (!Number.isNaN(toDate.getTime())) {
+      filter.date = { ...filter.date, $lte: toDate };
+    }
+  }
+
+  const searchText = typeof q === 'string' ? q.trim() : '';
+  if (searchText) {
+    const rx = new RegExp(escapeRegex(searchText), 'i');
+    filter.$or = [{ title: rx }, { description: rx }, { volunteerRequirements: rx }];
+  }
+
+  const populate = [
+    { path: 'community', select: 'name' },
+    { path: 'createdBy', select: 'name' },
+    { path: 'attendees', select: 'name' },
+    { path: 'volunteers', select: 'name' },
+  ];
+
+  const events = await Event.find(filter).sort({ date: 1 }).limit(300).populate(populate);
+
+  return res.json({ events });
 }
 
 async function listCommunityEvents(req, res) {
@@ -130,7 +264,113 @@ async function createEvent(req, res) {
     volunteers: [],
   });
 
+  const agendaItemCount = agenda?.items?.length ?? 0;
+  const postText = buildEventAnnouncementPostText(parsed.data, agendaItemCount);
+  try {
+    await Post.create({
+      community: communityId,
+      author: req.auth.sub,
+      text: postText,
+      event: event._id,
+      images: imageUrl ? [imageUrl] : [],
+      likes: [],
+    });
+  } catch (err) {
+    await Event.findByIdAndDelete(event._id);
+    console.error('Failed to create community post for new event', err);
+    return res.status(500).json({ message: 'Could not publish the event to the community feed' });
+  }
+
   return res.status(201).json({ event });
+}
+
+async function updateEvent(req, res) {
+  const { communityId, eventId } = req.params;
+  const auth = await requireApprovedMember(req.auth.sub, communityId);
+  if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
+
+  const event = await Event.findOne({ _id: eventId, community: communityId });
+  if (!event) return res.status(404).json({ message: 'Event not found' });
+
+  if (String(event.createdBy) !== String(req.auth.sub)) {
+    return res.status(403).json({ message: 'Only the event owner can edit this event' });
+  }
+
+  if (new Date(event.date).getTime() < Date.now()) {
+    return res.status(403).json({ message: 'Past events cannot be edited' });
+  }
+
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+
+  const agenda =
+    parsed.data.agenda && parsed.data.agenda.items?.length
+      ? {
+          startOffsetMinutes: parsed.data.agenda.startOffsetMinutes ?? 0,
+          items: parsed.data.agenda.items.map((it) => ({
+            title: it.title ?? '',
+            durationMinutes: it.durationMinutes,
+            gapBeforeMinutes: it.gapBeforeMinutes ?? 0,
+          })),
+        }
+      : undefined;
+
+  let imageUrl = event.imageUrl || '';
+  if (req.file) {
+    imageUrl = `/uploads/${req.file.filename}`;
+  } else if (req.body.imageUrl !== undefined && req.body.imageUrl !== '') {
+    imageUrl = String(req.body.imageUrl);
+  }
+
+  if (parsed.data.date.getTime() < Date.now()) {
+    return res.status(400).json({ message: 'Event start date and time must be in the future' });
+  }
+
+  const $set = {
+    title: parsed.data.title,
+    description: parsed.data.description,
+    whoFor: parsed.data.whoFor ?? '',
+    whatToBring: parsed.data.whatToBring ?? '',
+    volunteerRequirements: parsed.data.volunteerRequirements ?? '',
+    date: parsed.data.date,
+    venue: parsed.data.venue,
+    capacity: parsed.data.capacity,
+    imageUrl,
+  };
+
+  const $unset = {};
+
+  if (parsed.data.endDate !== undefined) {
+    $set.endDate = parsed.data.endDate;
+  } else {
+    $unset.endDate = '';
+  }
+
+  if (parsed.data.latitude !== undefined && parsed.data.longitude !== undefined) {
+    $set.location = { lat: parsed.data.latitude, lng: parsed.data.longitude };
+  } else {
+    $unset.location = '';
+  }
+
+  if (agenda) {
+    $set.agenda = agenda;
+  } else {
+    $unset.agenda = '';
+  }
+
+  const update = Object.keys($unset).length ? { $set, $unset } : { $set };
+
+  const populated = await Event.findOneAndUpdate({ _id: eventId, community: communityId }, update, {
+    new: true,
+    runValidators: true,
+  })
+    .populate('createdBy', 'name')
+    .populate('attendees', 'name')
+    .populate('volunteers', 'name');
+
+  if (!populated) return res.status(404).json({ message: 'Event not found' });
+
+  return res.json({ event: populated });
 }
 
 async function rsvp(req, res) {
@@ -208,4 +448,13 @@ async function getEventOwnerDetails(req, res) {
   });
 }
 
-module.exports = { listCommunityEvents, createEvent, rsvp, volunteer, getEventOwnerDetails };
+module.exports = {
+  listMyEvents,
+  listVolunteerOpportunities,
+  listCommunityEvents,
+  createEvent,
+  updateEvent,
+  rsvp,
+  volunteer,
+  getEventOwnerDetails,
+};

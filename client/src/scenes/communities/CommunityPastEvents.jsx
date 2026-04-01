@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useGetCommunityQuery, useListEventsQuery } from "@state/api";
 import CommunityEventsList from "./CommunityEventsList";
-import { normalizeId } from "./communityEventShared";
+import { filterEventsPast, normalizeId } from "./communityEventShared";
 
 export default function CommunityPastEvents() {
   const { id: communityId } = useParams();
@@ -22,12 +22,10 @@ export default function CommunityPastEvents() {
     [communityCreatedBy, userId],
   );
 
-  const pastEvents = useMemo(() => {
-    const now = Date.now();
-    return (eventsQ.data?.events || [])
-      .filter((ev) => new Date(ev.date).getTime() < now)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [eventsQ.data?.events]);
+  const pastEvents = useMemo(
+    () => filterEventsPast(eventsQ.data?.events || []),
+    [eventsQ.data?.events],
+  );
 
   const communityName = communityQ.data?.community?.name || "Community";
   const eventsError = eventsQ.error?.data?.message;
@@ -57,6 +55,7 @@ export default function CommunityPastEvents() {
         isCommunityOwner={isCommunityOwner}
         userId={userId}
         emptyMessage="No past events yet."
+        showEventEdit={false}
       />
     </Box>
   );

@@ -1,12 +1,17 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   MenuItem,
@@ -18,9 +23,15 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { GoogleMapPicker } from "@components/GoogleMapField";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
-import { Add, DragIndicator, RoomOutlined } from "@mui/icons-material";
+import {
+  Add,
+  DragIndicator,
+  ExpandMore,
+  RoomOutlined,
+  Search,
+} from "@mui/icons-material";
 import {
   useCreateCommentMutation,
   useCreateEventMutation,
@@ -34,17 +45,23 @@ import {
   useListPostsQuery,
   useUpdateCommunityMemberRoleMutation,
   useUpdateCommunityRulesMutation,
+  useUpdateEventMutation,
 } from "@state/api";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
 import CommunityEventsList from "./CommunityEventsList";
+import EventDetailsDialog from "./EventDetailsDialog";
+import EventRsvpVolunteerActions from "./EventRsvpVolunteerActions";
 import {
   computeAgendaSlots,
+  filterEventsUpcoming,
   formatAgendaClock,
   normalizeId,
   parseDateTimeLocalInput,
   parseTimeOnDatePart,
+  toAbsoluteMediaUrl,
+  toDateTimeLocalFromDate,
 } from "./communityEventShared";
 
 function TabPanel({ value, index, children }) {
@@ -66,7 +83,7 @@ function newAgendaRow() {
   };
 }
 
-function PostCard({ post, communityId, onLike }) {
+function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [createComment] = useCreateCommentMutation();
@@ -92,7 +109,16 @@ function PostCard({ post, communityId, onLike }) {
       </Stack>
       <Typography whiteSpace="pre-wrap">{post.text}</Typography>
 
-      <Stack direction="row" spacing={1} mt={1} mb={1}>
+      <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
+        {post.event?._id && onOpenEventDetail ? (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onOpenEventDetail(post.event)}
+          >
+            Details
+          </Button>
+        ) : null}
         <Button
           size="small"
           variant="outlined"
@@ -115,6 +141,12 @@ function PostCard({ post, communityId, onLike }) {
           {commentsOpen ? "Hide Comments" : "Show Comments"}
         </Button>
       </Stack>
+
+      {post.event?._id ? (
+        <Box mt={1}>
+          <EventRsvpVolunteerActions ev={post.event} communityId={communityId} />
+        </Box>
+      ) : null}
 
       {commentsOpen ? (
         <Box mt={1}>
@@ -203,12 +235,14 @@ export default function CommunityDetail() {
   const [likePost] = useLikePostMutation();
 
   const [createEvent] = useCreateEventMutation();
+  const [updateEvent] = useUpdateEventMutation();
   const [updateCommunityRules, { isLoading: isSavingRules }] =
     useUpdateCommunityRulesMutation();
   const [updateCommunityMemberRole, { isLoading: isUpdatingMemberRole }] =
     useUpdateCommunityMemberRoleMutation();
 
   const [postText, setPostText] = useState("");
+  const [postEventDetail, setPostEventDetail] = useState(null);
 
   const [eventTitle, setEventTitle] = useState("");
   const [eventDescription, setEventDescription] = useState("");
@@ -226,7 +260,17 @@ export default function CommunityDetail() {
   const [eventLocationDialogOpen, setEventLocationDialogOpen] = useState(false);
   const [agendaFirstOffsetMinutes, setAgendaFirstOffsetMinutes] = useState(0);
   const [agendaItems, setAgendaItems] = useState(() => [newAgendaRow()]);
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [existingEventImageUrl, setExistingEventImageUrl] = useState("");
+  const appliedEditEventParamRef = useRef(null);
   const [rulesDraft, setRulesDraft] = useState("");
+
+  const [eventListSearch, setEventListSearch] = useState("");
+  const [eventListDateFrom, setEventListDateFrom] = useState("");
+  const [eventListDateTo, setEventListDateTo] = useState("");
+  const [eventListFilterRsvp, setEventListFilterRsvp] = useState(false);
+  const [eventListFilterVolunteer, setEventListFilterVolunteer] = useState(false);
+  const [eventListFilterOwned, setEventListFilterOwned] = useState(false);
 
   const postsError = postsQ.error?.data?.message;
   const eventsError = eventsQ.error?.data?.message;
@@ -290,10 +334,22 @@ export default function CommunityDetail() {
       return cid === String(communityId) && m?.status === "approved";
     });
   }, [communityId, membershipsQ.data?.memberships]);
-  const eventPreviewUrl = useMemo(
-    () => (eventImageFile ? URL.createObjectURL(eventImageFile) : ""),
+  const eventImageBlobUrl = useMemo(
+    () => (eventImageFile ? URL.createObjectURL(eventImageFile) : null),
     [eventImageFile],
   );
+
+  useEffect(() => {
+    return () => {
+      if (eventImageBlobUrl) URL.revokeObjectURL(eventImageBlobUrl);
+    };
+  }, [eventImageBlobUrl]);
+
+  const eventPreviewUrl =
+    eventImageBlobUrl ||
+    (editingEventId && existingEventImageUrl
+      ? toAbsoluteMediaUrl(existingEventImageUrl)
+      : "");
 
   const createEventRequiredOk = useMemo(() => {
     const titleOk = eventTitle.trim().length >= 2;
@@ -319,22 +375,190 @@ export default function CommunityDetail() {
     }
   }, [createEventRequiredOk, createEventEndOk, showCreateEventErrors]);
 
-  const upcomingEvents = useMemo(() => {
-    const now = Date.now();
-    return (eventsQ.data?.events || [])
-      .filter((ev) => new Date(ev.date).getTime() >= now)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [eventsQ.data?.events]);
+  const upcomingEvents = useMemo(
+    () => filterEventsUpcoming(eventsQ.data?.events || []),
+    [eventsQ.data?.events],
+  );
+
+  const hasActiveEventListFilters = useMemo(() => {
+    return (
+      Boolean(eventListSearch.trim()) ||
+      Boolean(eventListDateFrom.trim()) ||
+      Boolean(eventListDateTo.trim()) ||
+      eventListFilterRsvp ||
+      eventListFilterVolunteer ||
+      eventListFilterOwned
+    );
+  }, [
+    eventListSearch,
+    eventListDateFrom,
+    eventListDateTo,
+    eventListFilterRsvp,
+    eventListFilterVolunteer,
+    eventListFilterOwned,
+  ]);
+
+  const filteredUpcomingEvents = useMemo(() => {
+    let list = upcomingEvents;
+    const q = eventListSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((ev) => {
+        const title = (ev.title || "").toLowerCase();
+        const desc = (ev.description || "").toLowerCase();
+        return title.includes(q) || desc.includes(q);
+      });
+    }
+    if (eventListDateFrom.trim()) {
+      const fromMs = new Date(eventListDateFrom).getTime();
+      if (!Number.isNaN(fromMs)) {
+        list = list.filter((ev) => new Date(ev.date).getTime() >= fromMs);
+      }
+    }
+    if (eventListDateTo.trim()) {
+      const toMs = new Date(eventListDateTo).getTime();
+      if (!Number.isNaN(toMs)) {
+        list = list.filter((ev) => new Date(ev.date).getTime() <= toMs);
+      }
+    }
+    const anyParticipationFilter =
+      eventListFilterRsvp || eventListFilterVolunteer || eventListFilterOwned;
+    if (anyParticipationFilter && userId) {
+      list = list.filter((ev) => {
+        if (eventListFilterRsvp) {
+          const rsvpd = (ev.attendees || []).some(
+            (a) => normalizeId(a) === userId,
+          );
+          if (rsvpd) return true;
+        }
+        if (eventListFilterVolunteer) {
+          const vol = (ev.volunteers || []).some(
+            (v) => normalizeId(v) === userId,
+          );
+          if (vol) return true;
+        }
+        if (eventListFilterOwned) {
+          if (normalizeId(ev.createdBy) === userId) return true;
+        }
+        return false;
+      });
+    }
+    return list;
+  }, [
+    upcomingEvents,
+    eventListSearch,
+    eventListDateFrom,
+    eventListDateTo,
+    eventListFilterRsvp,
+    eventListFilterVolunteer,
+    eventListFilterOwned,
+    userId,
+  ]);
+
+  const clearEventListFilters = () => {
+    setEventListSearch("");
+    setEventListDateFrom("");
+    setEventListDateTo("");
+    setEventListFilterRsvp(false);
+    setEventListFilterVolunteer(false);
+    setEventListFilterOwned(false);
+  };
 
   useEffect(() => {
     const t = searchParams.get("tab");
+    const editParam = searchParams.get("editEvent");
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+
     if (t === "events" || t === "3") {
-      setTab(3);
-      const next = new URLSearchParams(searchParams);
+      if (!editParam) setTab(3);
       next.delete("tab");
-      setSearchParams(next, { replace: true });
+      changed = true;
+    } else if (t === "create-event" || t === "4") {
+      setTab(4);
+      next.delete("tab");
+      changed = true;
     }
+
+    if (editParam) setTab(4);
+
+    if (changed) setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const editEventParam = searchParams.get("editEvent");
+    if (!editEventParam) {
+      appliedEditEventParamRef.current = null;
+      return;
+    }
+    if (!eventsQ.isSuccess || !communityId || !userId) return;
+    if (appliedEditEventParamRef.current === editEventParam) return;
+
+    const ev = (eventsQ.data?.events || []).find((e) => e._id === editEventParam);
+    if (!ev) {
+      toast.error("That event was not found.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("editEvent");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    if (normalizeId(ev.createdBy) !== userId) {
+      toast.error("You can only edit events you created.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("editEvent");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    if (new Date(ev.date).getTime() < Date.now()) {
+      toast.error("Past events cannot be edited.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("editEvent");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+
+    appliedEditEventParamRef.current = editEventParam;
+    setEditingEventId(ev._id);
+    setEventTitle(ev.title || "");
+    setEventDescription(ev.description || "");
+    setEventVenue(ev.venue || "");
+    setEventDate(toDateTimeLocalFromDate(ev.date));
+    setEventEndDate(ev.endDate ? toDateTimeLocalFromDate(ev.endDate) : "");
+    setEventWhoFor(ev.whoFor || "");
+    setEventWhatToBring(ev.whatToBring || "");
+    setEventVolunteerRequirements(ev.volunteerRequirements || "");
+    setEventCapacity(String(ev.capacity ?? ""));
+    setEventImageFile(null);
+    setExistingEventImageUrl(ev.imageUrl || "");
+    setEventLocation(
+      Number.isFinite(ev?.location?.lat) && Number.isFinite(ev?.location?.lng)
+        ? { lat: ev.location.lat, lng: ev.location.lng }
+        : null,
+    );
+    setEventLocationDialogOpen(false);
+    setAgendaFirstOffsetMinutes(ev.agenda?.startOffsetMinutes ?? 0);
+    setAgendaItems(
+      ev.agenda?.items?.length
+        ? ev.agenda.items.map((it) => ({
+            ...newAgendaRow(),
+            title: it.title ?? "",
+            durationMinutes: it.durationMinutes ?? 30,
+            gapBeforeMinutes: it.gapBeforeMinutes ?? 0,
+          }))
+        : [newAgendaRow()],
+    );
+    setShowCreateEventErrors(false);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("editEvent");
+    setSearchParams(next, { replace: true });
+  }, [
+    searchParams,
+    setSearchParams,
+    eventsQ.isSuccess,
+    eventsQ.data?.events,
+    communityId,
+    userId,
+  ]);
 
   const agendaSlots = useMemo(
     () => computeAgendaSlots(eventDate, agendaFirstOffsetMinutes, agendaItems),
@@ -560,6 +784,7 @@ export default function CommunityDetail() {
                 post={p}
                 communityId={communityId}
                 onLike={likePost}
+                onOpenEventDetail={setPostEventDetail}
               />
             ))}
           </Stack>
@@ -665,32 +890,188 @@ export default function CommunityDetail() {
         </TabPanel>
 
         <TabPanel value={tab} index={3}>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            justifyContent="space-between"
-            alignItems={{ sm: "center" }}
-            spacing={1.5}
-            mb={2}
-          >
-            <Typography variant="body2" color="text.secondary">
-              Upcoming and in-progress events (soonest first).
-            </Typography>
-            <Button
-              component={RouterLink}
-              to={`/communities/${communityId}/past-events`}
-              variant="outlined"
-              size="small"
+          <Stack spacing={1} mb={2}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "stretch", sm: "center" }}
+              spacing={1.5}
             >
-              Past Events
-            </Button>
+              <Typography variant="h6" fontWeight={700}>
+                Upcoming events
+              </Typography>
+              <Button
+                component={RouterLink}
+                to={`/communities/${communityId}/past-events`}
+                variant="outlined"
+                size="small"
+                sx={{ alignSelf: { xs: "flex-start", sm: "auto" } }}
+              >
+                Past events
+              </Button>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              Only upcoming events are listed here (soonest first). Open{" "}
+              <strong>Past events</strong> to see earlier ones.
+            </Typography>
           </Stack>
+
+          <Accordion
+            defaultExpanded={false}
+            disableGutters
+            elevation={0}
+            sx={{
+              mb: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 2,
+              overflow: "hidden",
+              bgcolor: "background.alt",
+              "&:before": { display: "none" },
+            }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMore />}
+              sx={{
+                px: 2,
+                minHeight: 48,
+                "& .MuiAccordionSummary-content": { my: 1, alignItems: "center" },
+              }}
+            >
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+                <Search fontSize="small" color="action" />
+                <Typography variant="subtitle2" fontWeight={700}>
+                  Search &amp; filters
+                </Typography>
+                {hasActiveEventListFilters ? (
+                  <Chip
+                    size="small"
+                    label={`${filteredUpcomingEvents.length}/${upcomingEvents.length}`}
+                    color="primary"
+                    variant="outlined"
+                  />
+                ) : null}
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails sx={{ px: 2, pb: 2, pt: 0 }}>
+              <Stack spacing={2}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Search title or description"
+                  value={eventListSearch}
+                  onChange={(e) => setEventListSearch(e.target.value)}
+                  placeholder="Keywords..."
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search fontSize="small" color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="datetime-local"
+                    label="From date & time"
+                    value={eventListDateFrom}
+                    onChange={(e) => setEventListDateFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ step: 60 }}
+                    helperText="Events on or after this start"
+                  />
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="datetime-local"
+                    label="To date & time"
+                    value={eventListDateTo}
+                    onChange={(e) => setEventListDateTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ step: 60 }}
+                    helperText="Events on or before this start"
+                  />
+                </Stack>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Show events where you match{" "}
+                  <strong>any</strong> checked option (with search and dates).
+                </Typography>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={{ xs: 0.5, sm: 2 }}
+                  flexWrap="wrap"
+                  useFlexGap
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={eventListFilterRsvp}
+                        onChange={(e) => setEventListFilterRsvp(e.target.checked)}
+                        disabled={!userId}
+                      />
+                    }
+                    label="I RSVP'd"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={eventListFilterVolunteer}
+                        onChange={(e) =>
+                          setEventListFilterVolunteer(e.target.checked)
+                        }
+                        disabled={!userId}
+                      />
+                    }
+                    label="I'm volunteering"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={eventListFilterOwned}
+                        onChange={(e) =>
+                          setEventListFilterOwned(e.target.checked)
+                        }
+                        disabled={!userId}
+                      />
+                    }
+                    label="I created"
+                  />
+                </Stack>
+                {hasActiveEventListFilters ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={clearEventListFilters}
+                    >
+                      Clear filters
+                    </Button>
+                    <Typography variant="caption" color="text.secondary">
+                      {filteredUpcomingEvents.length} of {upcomingEvents.length}{" "}
+                      shown
+                    </Typography>
+                  </Stack>
+                ) : null}
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+
           <CommunityEventsList
             communityId={communityId}
-            events={upcomingEvents}
+            events={filteredUpcomingEvents}
             eventsError={eventsError}
             isCommunityOwner={isCommunityOwner}
             userId={userId}
-            emptyMessage="No upcoming events yet."
+            emptyMessage={
+              upcomingEvents.length === 0
+                ? "No upcoming events yet."
+                : "No events match your filters. Try adjusting search or dates."
+            }
           />
         </TabPanel>
 
@@ -704,7 +1085,7 @@ export default function CommunityDetail() {
             width="100%"
           >
             <Typography variant="h6" fontWeight={800} mb={0.5}>
-              Create Event
+              {editingEventId ? "Edit Event" : "Create Event"}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
               <strong>Title</strong>, <strong>Venue</strong>, and{" "}
@@ -1173,6 +1554,8 @@ export default function CommunityDetail() {
               <Button
                 variant="text"
                 onClick={() => {
+                  setEditingEventId(null);
+                  setExistingEventImageUrl("");
                   setEventTitle("");
                   setEventDescription("");
                   setEventVenue("");
@@ -1188,6 +1571,7 @@ export default function CommunityDetail() {
                   setAgendaFirstOffsetMinutes(0);
                   setAgendaItems([newAgendaRow()]);
                   setShowCreateEventErrors(false);
+                  appliedEditEventParamRef.current = null;
                 }}
               >
                 Clear
@@ -1213,42 +1597,58 @@ export default function CommunityDetail() {
                     );
                     return;
                   }
+                  const payload = {
+                    title: eventTitle.trim(),
+                    description: eventDescription,
+                    whoFor: eventWhoFor,
+                    whatToBring: eventWhatToBring,
+                    volunteerRequirements: eventVolunteerRequirements,
+                    venue: eventVenue.trim(),
+                    date: new Date(eventDate).toISOString(),
+                    endDate:
+                      eventEndDate.trim() &&
+                      !Number.isNaN(new Date(eventEndDate).getTime())
+                        ? new Date(eventEndDate).toISOString()
+                        : undefined,
+                    capacity: Number(eventCapacity || 0),
+                    latitude: eventLocation?.lat,
+                    longitude: eventLocation?.lng,
+                    imageFile: eventImageFile,
+                    agenda: {
+                      startOffsetMinutes: agendaFirstOffsetMinutes,
+                      items: agendaItems.map((it) => ({
+                        title: (it.title || "").trim(),
+                        durationMinutes: Math.min(
+                          24 * 60,
+                          Math.max(1, Number(it.durationMinutes) || 30),
+                        ),
+                        gapBeforeMinutes: Math.max(
+                          0,
+                          Number(it.gapBeforeMinutes) || 0,
+                        ),
+                      })),
+                    },
+                  };
                   try {
-                    await createEvent({
-                      communityId,
-                      payload: {
-                        title: eventTitle.trim(),
-                        description: eventDescription,
-                        whoFor: eventWhoFor,
-                        whatToBring: eventWhatToBring,
-                        volunteerRequirements: eventVolunteerRequirements,
-                        venue: eventVenue.trim(),
-                        date: new Date(eventDate).toISOString(),
-                        endDate:
-                          eventEndDate.trim() &&
-                          !Number.isNaN(new Date(eventEndDate).getTime())
-                            ? new Date(eventEndDate).toISOString()
-                            : undefined,
-                        capacity: Number(eventCapacity || 0),
-                        latitude: eventLocation?.lat,
-                        longitude: eventLocation?.lng,
-                        imageFile: eventImageFile,
-                        agenda: {
-                          startOffsetMinutes: agendaFirstOffsetMinutes,
-                          items: agendaItems.map((it) => ({
-                            title: (it.title || "").trim(),
-                            durationMinutes: Math.min(
-                              24 * 60,
-                              Math.max(1, Number(it.durationMinutes) || 30),
-                            ),
-                            gapBeforeMinutes: Math.max(
-                              0,
-                              Number(it.gapBeforeMinutes) || 0,
-                            ),
-                          })),
-                        },
-                      },
-                    }).unwrap();
+                    if (editingEventId) {
+                      if (!eventImageFile && existingEventImageUrl) {
+                        payload.imageUrl = existingEventImageUrl;
+                      }
+                      await updateEvent({
+                        communityId,
+                        eventId: editingEventId,
+                        payload,
+                      }).unwrap();
+                      toast.success("Event updated");
+                    } else {
+                      await createEvent({
+                        communityId,
+                        payload,
+                      }).unwrap();
+                      toast.success("Event created");
+                    }
+                    setEditingEventId(null);
+                    setExistingEventImageUrl("");
                     setEventTitle("");
                     setEventDescription("");
                     setEventVenue("");
@@ -1264,22 +1664,33 @@ export default function CommunityDetail() {
                     setAgendaFirstOffsetMinutes(0);
                     setAgendaItems([newAgendaRow()]);
                     setShowCreateEventErrors(false);
-                    toast.success("Event created");
+                    appliedEditEventParamRef.current = null;
                     setTab(3);
                   } catch (err) {
                     toast.error(
-                      getApiErrorMessage(err, "Failed to create event"),
+                      getApiErrorMessage(
+                        err,
+                        editingEventId
+                          ? "Failed to update event"
+                          : "Failed to create event",
+                      ),
                     );
                   }
                 }}
                 disabled={!isApprovedMember}
               >
-                Create Event
+                {editingEventId ? "Save changes" : "Create Event"}
               </Button>
             </Stack>
           </Box>
         </TabPanel>
       </Box>
+
+      <EventDetailsDialog
+        open={!!postEventDetail}
+        onClose={() => setPostEventDetail(null)}
+        evDetail={postEventDetail}
+      />
     </Box>
   );
 }

@@ -13,6 +13,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const membershipRoutes = require('./routes/membershipRoutes');
 const postRoutes = require('./routes/postRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const meRoutes = require('./routes/meRoutes');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/me', meRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/memberships', membershipRoutes);

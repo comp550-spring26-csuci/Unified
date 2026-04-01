@@ -9,6 +9,22 @@ export function normalizeId(value) {
   return String(value?._id || value?.id || "");
 }
 
+/** Events whose start time is still in the future or now; soonest first. */
+export function filterEventsUpcoming(events) {
+  const now = Date.now();
+  return [...(events || [])]
+    .filter((ev) => new Date(ev.date).getTime() >= now)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+/** Events whose start time is in the past; most recent first. */
+export function filterEventsPast(events) {
+  const now = Date.now();
+  return [...(events || [])]
+    .filter((ev) => new Date(ev.date).getTime() < now)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
 export function toAbsoluteMediaUrl(url) {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;

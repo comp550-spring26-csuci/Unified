@@ -17,7 +17,9 @@ import {
 import {
   ChevronLeft,
   ChevronRightOutlined,
+  EventAvailableOutlined,
   HomeOutlined,
+  VolunteerActivismOutlined,
   Groups2Outlined,
   AdminPanelSettingsOutlined,
   HowToRegOutlined,
@@ -88,6 +90,16 @@ const Sidebar = ({
           text: "My communities",
           path: "/my-communities",
           icon: <HowToRegOutlined />,
+        },
+        {
+          text: "Events",
+          path: "/my-events",
+          icon: <EventAvailableOutlined />,
+        },
+        {
+          text: "Volunteer opportunities",
+          path: "/volunteer-opportunities",
+          icon: <VolunteerActivismOutlined />,
         },
       );
     }
