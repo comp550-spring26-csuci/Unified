@@ -89,6 +89,19 @@ export default function Login() {
             borderRadius: 4,
           }}
         >
+          <Box
+            component="img"
+            src="/auth-logo.png"
+            alt="Unified"
+            sx={{
+              width: 136,
+              height: 136,
+              objectFit: "contain",
+              display: "block",
+              mx: "auto",
+              mb: -2.25,
+            }}
+          />
           <Typography variant="h4" mb={0.5} textAlign="center">
             Welcome back
           </Typography>
