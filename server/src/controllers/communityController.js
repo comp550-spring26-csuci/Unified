@@ -1,6 +1,10 @@
 const { z } = require('zod');
 const Community = require('../models/Community');
 const Membership = require('../models/Membership');
+const {
+  findInvalidCommunityTags,
+  normalizeCommunityTagList,
+} = require('../constants/communityTags');
 
 const createSchema = z.object({
   name: z.string().min(2).max(120),
@@ -28,13 +32,21 @@ async function createCommunity(req, res) {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
 
+  const invalidKeywords = findInvalidCommunityTags(parsed.data.keywords || []);
+  if (invalidKeywords.length) {
+    return res.status(400).json({
+      message: 'Invalid community keywords selected',
+      invalidKeywords,
+    });
+  }
+
   const community = await Community.create({
     ...parsed.data,
+    keywords: normalizeCommunityTagList(parsed.data.keywords || [], { max: 20 }),
     createdBy: req.auth.sub,
     admins: [req.auth.sub],
   });
 
-  // Creator gets approved membership automatically (even while community pending)
   await Membership.updateOne(
     { user: req.auth.sub, community: community._id },
     { $setOnInsert: { user: req.auth.sub, community: community._id, status: 'approved', joinedAt: new Date() } },
@@ -48,7 +60,6 @@ async function getCommunity(req, res) {
   const community = await Community.findById(req.params.id);
   if (!community) return res.status(404).json({ message: 'Community not found' });
   if (community.status !== 'approved') {
-    // Only super_admin or community admin can view pending/rejected
     const isSuper = req.auth?.role === 'super_admin';
     const admins = Array.isArray(community.admins) ? community.admins : [];
     const isAdmin = admins.map(String).includes(String(req.auth?.sub));

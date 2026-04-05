@@ -18,15 +18,23 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import {
   useCreateCommunityMutation,
   useListCommunitiesQuery,
+  useMeQuery,
   useMyMembershipsQuery,
   useRequestJoinMutation,
 } from "@state/api";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import {
+  COMMUNITY_TAG_OPTIONS,
+  formatCommunityTagList,
+  getCommunityTagLabel,
+  getRestrictedCommunityTagValues,
+} from "../../constants/communityTags";
 
 const REGION_OPTIONS = [
   "United States",
@@ -50,7 +58,9 @@ function detectRegionFromBrowser() {
     const localeMatch = locale.match(/[-_]([A-Za-z]{2})$/);
     const countryCode = localeMatch?.[1]?.toUpperCase();
     if (countryCode && typeof Intl !== "undefined" && Intl.DisplayNames) {
-      const regionName = new Intl.DisplayNames(["en"], { type: "region" }).of(countryCode);
+      const regionName = new Intl.DisplayNames(["en"], { type: "region" }).of(
+        countryCode,
+      );
       if (regionName) return regionName;
     }
 
@@ -59,7 +69,8 @@ function detectRegionFromBrowser() {
     if (tz.startsWith("Europe/")) return "Europe";
     if (tz.startsWith("Asia/")) return "Asia";
     if (tz.startsWith("Africa/")) return "Africa";
-    if (tz.startsWith("Australia/") || tz.startsWith("Pacific/")) return "Australia";
+    if (tz.startsWith("Australia/") || tz.startsWith("Pacific/"))
+      return "Australia";
   } catch {
     // no-op: fallback to manual selection
   }
@@ -73,16 +84,19 @@ function TabPanel({ value, index, children }) {
 
 export default function Communities() {
   const navigate = useNavigate();
+  const token = useSelector((s) => s.global.token);
   const { data, isLoading, error, refetch } = useListCommunitiesQuery();
+  const { data: me } = useMeQuery(token, { skip: !token });
   const { data: membershipsData } = useMyMembershipsQuery();
   const [createCommunity] = useCreateCommunityMutation();
-  const [requestJoin, { isLoading: isJoinSubmitting }] = useRequestJoinMutation();
+  const [requestJoin, { isLoading: isJoinSubmitting }] =
+    useRequestJoinMutation();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [region, setRegion] = useState("");
   const [detectedRegion, setDetectedRegion] = useState("");
-  const [keywords, setKeywords] = useState("");
+  const [keywords, setKeywords] = useState([]);
   const [description, setDescription] = useState("");
   const [rules, setRules] = useState("");
   const [createError, setCreateError] = useState("");
@@ -103,24 +117,60 @@ export default function Communities() {
     setDetectedRegion(detected);
   }, [open, region]);
 
-  const rows = (data?.communities || []).map((c) => ({
-    id: c._id,
-    name: c.name,
-    status: c.status,
-    region: c.region || "",
-    keywords: (c.keywords || []).join(", "),
-    rules: c.rules || "",
+  const rows = (data?.communities || []).map((community) => ({
+    id: community._id,
+    name: community.name,
+    status: community.status,
+    region: community.region || "",
+    keywords: formatCommunityTagList(community.keywords || []),
+    keywordValues: community.keywords || [],
+    rules: community.rules || "",
   }));
 
   const membershipByCommunityId = useMemo(() => {
     const map = new Map();
     for (const membership of membershipsData?.memberships || []) {
-      const cid = String(membership?.community?._id || membership?.community || "");
-      if (!cid) continue;
-      map.set(cid, membership.status);
+      const communityId = String(
+        membership?.community?._id || membership?.community || "",
+      );
+      if (!communityId) continue;
+      map.set(communityId, membership.status);
     }
     return map;
   }, [membershipsData?.memberships]);
+
+  const profileInterests = useMemo(
+    () => new Set(me?.interests || []),
+    [me?.interests],
+  );
+  const joinRequiredTags = useMemo(
+    () => getRestrictedCommunityTagValues(joinCommunity?.keywords || []),
+    [joinCommunity?.keywords],
+  );
+  const joinMissingTags = useMemo(
+    () => joinRequiredTags.filter((tag) => !profileInterests.has(tag)),
+    [joinRequiredTags, profileInterests],
+  );
+  const selectedKeywordOptions = useMemo(
+    () =>
+      COMMUNITY_TAG_OPTIONS.filter((option) => keywords.includes(option.value)),
+    [keywords],
+  );
+  const selectedRestrictedKeywords = useMemo(
+    () => getRestrictedCommunityTagValues(keywords),
+    [keywords],
+  );
+  const createValidationMessages = useMemo(() => {
+    const messages = [];
+    if (!name.trim()) messages.push("Enter a community name.");
+    if (rules.trim().length < 10) {
+      messages.push(
+        `Community rules must be at least 10 characters (${rules.trim().length}/10).`,
+      );
+    }
+    return messages;
+  }, [name, rules]);
+  const isCreateDisabled = createValidationMessages.length > 0;
 
   const resetJoinPrompt = () => {
     setJoinPromptOpen(false);
@@ -137,6 +187,7 @@ export default function Communities() {
       _id: row?.id,
       name: row?.name || "",
       rules: row?.rules || "",
+      keywords: row?.keywordValues || [],
     });
     setJoinPromptTab(0);
     setJoinReason("");
@@ -148,6 +199,7 @@ export default function Communities() {
 
   const canSubmitJoinRequest =
     !!joinCommunity &&
+    joinMissingTags.length === 0 &&
     joinReason.trim().length >= 20 &&
     joinReason.trim().length <= 300 &&
     aboutMe.trim().length >= 20 &&
@@ -179,7 +231,10 @@ export default function Communities() {
       {
         field: "keywords",
         headerName: "Keywords",
-        flex: 1,
+        flex: 1.3,
+        renderCell: (params) => (
+          <Typography variant="body2">{params.value || "-"}</Typography>
+        ),
       },
       {
         field: "actions",
@@ -227,7 +282,7 @@ export default function Communities() {
         ),
       },
     ],
-    [navigate, membershipByCommunityId, openJoinPrompt]
+    [membershipByCommunityId],
   );
 
   const onCreate = async () => {
@@ -236,10 +291,7 @@ export default function Communities() {
       const payload = {
         name,
         region,
-        keywords: keywords
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        keywords,
         description,
         rules,
       };
@@ -248,7 +300,7 @@ export default function Communities() {
       setName("");
       setRegion("");
       setDetectedRegion("");
-      setKeywords("");
+      setKeywords([]);
       setDescription("");
       setRules("");
       toast.success("Community created and submitted for approval");
@@ -262,15 +314,31 @@ export default function Communities() {
 
   return (
     <Box p={3}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={2} mb={2}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "stretch", sm: "center" }}
+        spacing={2}
+        mb={2}
+      >
         <Box>
-          <Typography variant="h4" fontWeight={700}>Communities</Typography>
-          <Typography variant="body2" color="text.secondary">Browse approved communities and request membership.</Typography>
+          <Typography variant="h4" fontWeight={700}>
+            Communities
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Browse approved communities and request membership.
+          </Typography>
         </Box>
-        <Button variant="contained" onClick={() => setOpen(true)}>Create Community</Button>
+        <Button variant="contained" onClick={() => setOpen(true)}>
+          Create Community
+        </Button>
       </Stack>
 
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error?.data?.message || "Failed to load"}</Alert> : null}
+      {error ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error?.data?.message || "Failed to load"}
+        </Alert>
+      ) : null}
 
       <Box height="65vh">
         <DataGrid
@@ -289,11 +357,27 @@ export default function Communities() {
         />
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Create community (will be pending until Super Admin approves)</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          Create community (will be pending until Super Admin approves)
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+        >
           {createError ? <Alert severity="error">{createError}</Alert> : null}
-          <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} />
+          <TextField
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            error={!name.trim()}
+            helperText={!name.trim() ? "Community name is required." : " "}
+          />
           <Autocomplete
             freeSolo
             options={REGION_OPTIONS}
@@ -306,12 +390,70 @@ export default function Communities() {
               <TextField
                 {...params}
                 label="Region"
-                helperText={detectedRegion ? `Auto-detected: ${detectedRegion}` : "Select or type a region"}
+                helperText={
+                  detectedRegion
+                    ? `Auto-detected: ${detectedRegion}`
+                    : "Select or type a region"
+                }
               />
             )}
           />
-          <TextField label="Keywords (comma separated)" value={keywords} onChange={(e) => setKeywords(e.target.value)} />
-          <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline minRows={3} />
+          <Autocomplete
+            multiple
+            options={COMMUNITY_TAG_OPTIONS}
+            value={selectedKeywordOptions}
+            onChange={(_event, values) =>
+              setKeywords(values.map((option) => option.value))
+            }
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, value) =>
+              option.value === value.value
+            }
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip
+                  {...getTagProps({ index })}
+                  key={option.value}
+                  label={option.label}
+                  size="small"
+                />
+              ))
+            }
+            renderOption={(props, option, { selected }) => (
+              <Box
+                component="li"
+                {...props}
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                gap={1}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Checkbox checked={selected} sx={{ p: 0.5 }} />
+                  <Typography variant="body2">{option.label}</Typography>
+                </Stack>
+                {option.restricted ? (
+                  <Chip label="Eligibility" size="small" />
+                ) : null}
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Community Keywords"
+                helperText="Eligibility tags require matching profile interests for join requests."
+              />
+            )}
+          />
+
+          <TextField
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            multiline
+            minRows={3}
+            helperText={`${description.length}/2000`}
+          />
           <TextField
             label="Community Rules"
             value={rules}
@@ -319,30 +461,46 @@ export default function Communities() {
             multiline
             minRows={4}
             required
-            helperText={`${rules.length}/5000`}
+            error={rules.trim().length < 10}
+            helperText={
+              rules.trim().length < 10
+                ? `Community rules must be at least 10 characters (${rules.trim().length}/10).`
+                : `${rules.length}/5000`
+            }
           />
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            {keywords
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .slice(0, 8)
-              .map((k) => (
-                <Chip key={k} label={k} size="small" />
-              ))}
-          </Stack>
+          {selectedRestrictedKeywords.length ? (
+            <Alert severity="info">
+              Restricted join tags:{" "}
+              {selectedRestrictedKeywords.map(getCommunityTagLabel).join(", ")}
+            </Alert>
+          ) : null}
+          {isCreateDisabled ? (
+            <Alert severity="warning">
+              For creating: {createValidationMessages.join(" ")}
+            </Alert>
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={onCreate} disabled={!name.trim() || rules.trim().length < 10}>
+          <Button
+            variant="contained"
+            onClick={onCreate}
+            disabled={isCreateDisabled}
+          >
             Create
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={joinPromptOpen} onClose={resetJoinPrompt} fullWidth maxWidth="md">
+      <Dialog
+        open={joinPromptOpen}
+        onClose={resetJoinPrompt}
+        fullWidth
+        maxWidth="md"
+      >
         <DialogTitle>
-          Request to Join {joinCommunity?.name ? `"${joinCommunity.name}"` : "Community"}
+          Request to Join{" "}
+          {joinCommunity?.name ? `"${joinCommunity.name}"` : "Community"}
         </DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
           <Tabs value={joinPromptTab} onChange={(_e, v) => setJoinPromptTab(v)}>
@@ -352,6 +510,17 @@ export default function Communities() {
 
           <TabPanel value={joinPromptTab} index={0}>
             <Stack spacing={2}>
+              {joinRequiredTags.length ? (
+                <Alert
+                  severity={joinMissingTags.length ? "warning" : "success"}
+                >
+                  Required profile tags:{" "}
+                  {joinRequiredTags.map(getCommunityTagLabel).join(", ")}
+                  {joinMissingTags.length
+                    ? ` | Missing from your profile: ${joinMissingTags.map(getCommunityTagLabel).join(", ")}`
+                    : " | Your profile matches this community requirement."}
+                </Alert>
+              ) : null}
               <TextField
                 label="Why do you want to join this community?"
                 multiline
@@ -389,20 +558,39 @@ export default function Communities() {
           </TabPanel>
 
           <TabPanel value={joinPromptTab} index={1}>
-            <Box
-              p={2}
-              borderRadius={2}
-              bgcolor="background.alt"
-              border="1px solid"
-              borderColor="divider"
-            >
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>
-                Rules
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                {joinCommunity?.rules?.trim() || "No rules provided by this community."}
-              </Typography>
-            </Box>
+            <Stack spacing={2}>
+              {joinRequiredTags.length ? (
+                <Box
+                  p={2}
+                  borderRadius={2}
+                  bgcolor="background.alt"
+                  border="1px solid"
+                  borderColor="divider"
+                >
+                  <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                    Join Eligibility Tags
+                  </Typography>
+                  <Typography variant="body2">
+                    {joinRequiredTags.map(getCommunityTagLabel).join(", ")}
+                  </Typography>
+                </Box>
+              ) : null}
+              <Box
+                p={2}
+                borderRadius={2}
+                bgcolor="background.alt"
+                border="1px solid"
+                borderColor="divider"
+              >
+                <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                  Rules
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                  {joinCommunity?.rules?.trim() ||
+                    "No rules provided by this community."}
+                </Typography>
+              </Box>
+            </Stack>
           </TabPanel>
         </DialogContent>
         <DialogActions>

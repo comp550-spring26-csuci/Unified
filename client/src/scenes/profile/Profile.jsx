@@ -1,8 +1,10 @@
 import {
   Alert,
   Avatar,
+  Autocomplete,
   Box,
   Button,
+  Chip,
   Paper,
   Stack,
   TextField,
@@ -14,6 +16,10 @@ import { useMeQuery, useUpdateProfileMutation } from "@state/api";
 import { setUser } from "@state";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import {
+  COMMUNITY_TAG_OPTIONS,
+  getCommunityTagLabel,
+} from "../../constants/communityTags";
 
 const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
 
@@ -37,7 +43,7 @@ export default function Profile() {
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
   const [mailingAddress, setMailingAddress] = useState("");
-  const [interestsInput, setInterestsInput] = useState("");
+  const [selectedInterests, setSelectedInterests] = useState([]);
   const [avatarFile, setAvatarFile] = useState(null);
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export default function Profile() {
     setCountry(me.country || "");
     setCity(me.city || "");
     setMailingAddress(me.mailingAddress || "");
-    setInterestsInput((me.interests || []).join(", "));
+    setSelectedInterests(Array.isArray(me.interests) ? me.interests : []);
     setAvatarFile(null);
   }, [me]);
 
@@ -61,6 +67,11 @@ export default function Profile() {
     };
   }, [avatarFile, avatarPreviewUrl]);
 
+  const selectedInterestOptions = useMemo(
+    () => COMMUNITY_TAG_OPTIONS.filter((option) => selectedInterests.includes(option.value)),
+    [selectedInterests]
+  );
+
   const onSave = async () => {
     try {
       const res = await updateProfile({
@@ -68,7 +79,7 @@ export default function Profile() {
         country,
         city,
         mailingAddress,
-        interests: interestsInput,
+        interests: selectedInterests,
         avatarFile,
       }).unwrap();
       dispatch(setUser(res.user));
@@ -160,11 +171,38 @@ export default function Profile() {
               value={mailingAddress}
               onChange={(e) => setMailingAddress(e.target.value)}
             />
-            <TextField
-              fullWidth
-              label="Interests (comma separated)"
-              value={interestsInput}
-              onChange={(e) => setInterestsInput(e.target.value)}
+            <Autocomplete
+              multiple
+              options={COMMUNITY_TAG_OPTIONS}
+              value={selectedInterestOptions}
+              onChange={(_event, values) =>
+                setSelectedInterests(values.map((option) => option.value))
+              }
+              getOptionLabel={(option) => option.label}
+              isOptionEqualToValue={(option, value) => option.value === value.value}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option.value}
+                    label={option.label}
+                    size="small"
+                  />
+                ))
+              }
+              renderOption={(props, option) => (
+                <Box component="li" {...props} display="flex" justifyContent="space-between" gap={1}>
+                  <Typography variant="body2">{option.label}</Typography>
+                  {option.restricted ? <Chip label="Eligibility" size="small" /> : null}
+                </Box>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Interests"
+                  helperText="Select your interests and any eligibility tags that describe you."
+                />
+              )}
             />
 
             <Stack
@@ -184,6 +222,9 @@ export default function Profile() {
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Selected interests: {selectedInterests.length ? selectedInterests.map(getCommunityTagLabel).join(", ") : "None"}
+            </Typography>
           </Stack>
         </Stack>
       </Paper>

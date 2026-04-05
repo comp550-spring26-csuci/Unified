@@ -1,5 +1,10 @@
 const Community = require('../models/Community');
 const Membership = require('../models/Membership');
+const User = require('../models/User');
+const {
+  getRestrictedCommunityTags,
+  normalizeCommunityTagList,
+} = require('../constants/communityTags');
 
 function hasUserInList(list, userId) {
   return Array.isArray(list) && list.map(String).includes(String(userId));
@@ -63,6 +68,23 @@ async function requestJoin(req, res) {
 
   const profile = parseJoinProfile(req.body);
   if (!profile.ok) return res.status(400).json({ message: profile.message });
+
+  const requiredInterests = getRestrictedCommunityTags(community.keywords || []);
+  if (requiredInterests.length) {
+    const user = await User.findById(req.auth.sub).select('interests');
+    const userInterests = new Set(
+      normalizeCommunityTagList(user?.interests || [], { max: 20 })
+    );
+    const missingInterests = requiredInterests.filter((interest) => !userInterests.has(interest));
+
+    if (missingInterests.length) {
+      return res.status(403).json({
+        message: 'Update your profile interests to match this community requirements before requesting to join.',
+        requiredInterests,
+        missingInterests,
+      });
+    }
+  }
 
   const existing = await Membership.findOne({ user: req.auth.sub, community: communityId });
   if (existing?.status === 'approved') return res.json({ membership: existing });
@@ -200,7 +222,6 @@ async function updateCommunityMemberRole(req, res) {
   if (requestedRole === 'admin') admins.add(targetId);
   if (requestedRole === 'moderator') moderators.add(targetId);
 
-  // Keep creator as admin for consistency.
   if (creatorId) admins.add(creatorId);
 
   community.admins = Array.from(admins);
