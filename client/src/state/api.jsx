@@ -64,7 +64,7 @@ export const api = createApi({
         formData.append("country", payload?.country || "");
         formData.append("city", payload?.city || "");
         formData.append("mailingAddress", payload?.mailingAddress || "");
-        formData.append("interests", payload?.interests || "");
+        formData.append("interests", Array.isArray(payload?.interests) ? payload.interests.join(",") : payload?.interests || "");
         if (payload?.avatarFile) formData.append("avatar", payload.avatarFile);
         return {
           url: "api/auth/me",
@@ -358,3 +358,4 @@ export const {
   useRsvpMutation,
   useVolunteerMutation,
 } = api;
+

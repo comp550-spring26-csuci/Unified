@@ -6,9 +6,6 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  List,
-  ListItem,
-  ListItemText,
   Stack,
   Typography,
 } from "@mui/material";
@@ -26,6 +23,7 @@ import { useLazyGetEventOwnerDetailQuery } from "@state/api";
 import EventDetailsDialog from "./EventDetailsDialog";
 import EventRsvpVolunteerActions from "./EventRsvpVolunteerActions";
 import { normalizeId, toAbsoluteMediaUrl } from "./communityEventShared";
+import { formatCommunityTagList } from "../../constants/communityTags";
 
 export default function CommunityEventsList({
   communityId,
@@ -369,7 +367,7 @@ export default function CommunityEventsList({
               <Typography variant="body2">
                 <strong>Interests:</strong>{" "}
                 {(ownerDetailQ.data.owner.interests || []).length
-                  ? ownerDetailQ.data.owner.interests.join(", ")
+                  ? formatCommunityTagList(ownerDetailQ.data.owner.interests)
                   : "-"}
               </Typography>
             </Stack>

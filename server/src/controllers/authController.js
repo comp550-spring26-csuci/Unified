@@ -5,6 +5,10 @@ const User = require('../models/User');
 const PasswordResetOtp = require('../models/PasswordResetOtp');
 const { signAccessToken } = require('../utils/tokens');
 const { sendPasswordResetOtp } = require('../utils/mail');
+const {
+  findInvalidCommunityTags,
+  normalizeCommunityTagList,
+} = require('../constants/communityTags');
 
 const registerSchema = z.object({
   name: z.string().min(2).max(80),
@@ -24,11 +28,11 @@ function toSafeUser(user) {
     email: user.email,
     role: user.role,
     status: user.status,
-    country: user.country || "",
-    city: user.city || "",
-    mailingAddress: user.mailingAddress || "",
+    country: user.country || '',
+    city: user.city || '',
+    mailingAddress: user.mailingAddress || '',
     interests: user.interests || [],
-    avatarUrl: user.avatarUrl || "",
+    avatarUrl: user.avatarUrl || '',
   };
 }
 
@@ -81,22 +85,33 @@ const updateProfileSchema = z.object({
 function parseInterests(raw) {
   if (Array.isArray(raw)) return raw.map((x) => String(x || '').trim()).filter(Boolean);
   if (typeof raw !== 'string') return undefined;
-  const v = raw.trim();
-  if (!v) return [];
-  // Supports comma-separated strings from form input.
-  return v.split(',').map((x) => x.trim()).filter(Boolean);
+  const value = raw.trim();
+  if (!value) return [];
+  return value.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
 async function updateProfile(req, res) {
   const user = await User.findById(req.auth.sub);
   if (!user) return res.status(404).json({ message: 'User not found' });
 
+  const parsedInterests = parseInterests(req.body?.interests);
+  const invalidInterests = findInvalidCommunityTags(parsedInterests || []);
+  if (invalidInterests.length) {
+    return res.status(400).json({
+      message: 'Invalid interests selected',
+      invalidInterests,
+    });
+  }
+
   const parsed = updateProfileSchema.safeParse({
     name: req.body?.name,
     country: req.body?.country,
     city: req.body?.city,
     mailingAddress: req.body?.mailingAddress,
-    interests: parseInterests(req.body?.interests),
+    interests:
+      parsedInterests === undefined
+        ? undefined
+        : normalizeCommunityTagList(parsedInterests, { max: 20 }),
   });
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
 
@@ -133,9 +148,8 @@ async function forgotPassword(req, res) {
   const user = await User.findOne({ email });
   if (!user || user.status === 'banned') {
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
       console.warn(
-        '[auth] forgot-password: no active account for this email — no email will be sent (response is still generic).'
+        '[auth] forgot-password: no active account for this email; no email will be sent (response is still generic).'
       );
     }
     return res.json({ message: FORGOT_PASSWORD_OK });
