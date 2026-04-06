@@ -1,3 +1,4 @@
+const uploadPostImage = require("../middleware/upload");
 const express = require('express');
 const { authRequired } = require('../middleware/auth');
 const { listCommunityPosts, createPost, toggleLike } = require('../controllers/postController');
