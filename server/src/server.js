@@ -33,7 +33,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
