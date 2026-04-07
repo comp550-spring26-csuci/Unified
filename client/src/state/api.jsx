@@ -178,13 +178,21 @@ export const api = createApi({
       providesTags: ["Posts"],
     }),
     createPost: build.mutation({
-      query: ({ communityId, text }) => ({
-        url: `api/communities/${communityId}/posts`,
-        method: "POST",
-        body: { text },
-      }),
-      invalidatesTags: ["Posts", "DashboardActivity"],
-    }),
+  query: ({ communityId, text, imageFile }) => {
+    const formData = new FormData();
+    formData.append("text", text || "");
+    if (imageFile) {
+      formData.append("image", imageFile);
+    }
+
+    return {
+      url: `api/communities/${communityId}/posts`,
+      method: "POST",
+      body: formData,
+    };
+  },
+  invalidatesTags: ["Posts", "DashboardActivity"],
+}),
     likePost: build.mutation({
       query: ({ communityId, postId }) => ({
         url: `api/communities/${communityId}/posts/${postId}/like`,
