@@ -107,7 +107,26 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
           {new Date(post.createdAt).toLocaleString()}
         </Typography>
       </Stack>
+
       <Typography whiteSpace="pre-wrap">{post.text}</Typography>
+
+      {post.image ? (
+        <Box
+          component="img"
+          src={toAbsoluteMediaUrl(post.image)}
+          alt="Post"
+          sx={{
+            mt: 1.5,
+            width: "100%",
+            maxHeight: 360,
+            objectFit: "cover",
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.paper",
+          }}
+        />
+      ) : null}
 
       <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
         {post.event?._id && onOpenEventDetail ? (
@@ -346,6 +365,18 @@ export default function CommunityDetail() {
       if (eventImageBlobUrl) URL.revokeObjectURL(eventImageBlobUrl);
     };
   }, [eventImageBlobUrl]);
+
+  useEffect(() => {
+    if (!postImageFile) {
+      setPostImagePreview("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(postImageFile);
+    setPostImagePreview(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [postImageFile]);
 
   const eventPreviewUrl =
     eventImageBlobUrl ||
@@ -755,28 +786,85 @@ export default function CommunityDetail() {
             </Alert>
           ) : null}
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} mb={2}>
+          <Stack spacing={1.5} mb={2}>
             <TextField
               fullWidth
+              multiline
+              minRows={3}
               label="Write a post"
               value={postText}
               onChange={(e) => setPostText(e.target.value)}
             />
-            <Button
-              variant="contained"
-              onClick={async () => {
-                try {
-                  await createPost({ communityId, text: postText }).unwrap();
-                  setPostText("");
-                  toast.success("Post created");
-                } catch (err) {
-                  toast.error(getApiErrorMessage(err, "Failed to create post"));
-                }
-              }}
-              disabled={!postText.trim()}
+
+            {postImagePreview ? (
+              <Box
+                component="img"
+                src={postImagePreview}
+                alt="Post preview"
+                sx={{
+                  width: "100%",
+                  maxHeight: 320,
+                  objectFit: "cover",
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              />
+            ) : null}
+
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              justifyContent="space-between"
+              alignItems={{ xs: "stretch", sm: "center" }}
             >
-              Post
-            </Button>
+              <Button variant="outlined" component="label">
+                {postImageFile ? "Change Image" : "Upload Image"}
+                <input
+                  hidden
+                  accept="image/*"
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setPostImageFile(file);
+                  }}
+                />
+              </Button>
+
+              <Stack direction="row" spacing={1}>
+                {postImageFile ? (
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    onClick={() => setPostImageFile(null)}
+                  >
+                    Remove Image
+                  </Button>
+                ) : null}
+
+                <Button
+                  variant="contained"
+                  onClick={async () => {
+                    try {
+                      await createPost({
+                        communityId,
+                        text: postText,
+                        imageFile: postImageFile,
+                      }).unwrap();
+
+                      setPostText("");
+                      setPostImageFile(null);
+                      toast.success("Post created");
+                    } catch (err) {
+                      toast.error(getApiErrorMessage(err, "Failed to create post"));
+                    }
+                  }}
+                  disabled={!postText.trim() && !postImageFile}
+                >
+                  Post
+                </Button>
+              </Stack>
+            </Stack>
           </Stack>
 
           <Stack spacing={2}>
