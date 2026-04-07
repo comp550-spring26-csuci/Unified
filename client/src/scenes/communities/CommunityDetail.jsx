@@ -242,6 +242,8 @@ export default function CommunityDetail() {
     useUpdateCommunityMemberRoleMutation();
 
   const [postText, setPostText] = useState("");
+  const [postImageFile, setPostImageFile] = useState(null);
+  const [postImagePreview, setPostImagePreview] = useState("");
   const [postEventDetail, setPostEventDetail] = useState(null);
 
   const [eventTitle, setEventTitle] = useState("");
