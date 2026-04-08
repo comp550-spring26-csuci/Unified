@@ -36,8 +36,29 @@ async function listCommunityPosts(req, res) {
   return res.json({ posts });
 }
 
+function parseImageUrls(raw) {
+  if (Array.isArray(raw)) return raw.map((value) => String(value || '').trim()).filter(Boolean);
+  if (typeof raw !== 'string') return [];
+
+  const value = raw.trim();
+  if (!value) return [];
+
+  if (value.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  return [value];
+}
+
 const createSchema = z.object({
-  text: z.string().min(1).max(5000),
+  text: z.string().max(5000).optional().default(''),
   images: z.array(z.string().url()).optional().default([]),
 });
 
@@ -46,14 +67,27 @@ async function createPost(req, res) {
   const auth = await requireApprovedMember(req.auth.sub, communityId);
   if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
 
-  const parsed = createSchema.safeParse(req.body);
+  const parsed = createSchema.safeParse({
+    text: typeof req.body?.text === 'string' ? req.body.text : '',
+    images: parseImageUrls(req.body?.images),
+  });
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+
+  const uploadedImageUrl = req.file ? `/uploads/post/${req.file.filename}` : '';
+  const text = parsed.data.text.trim();
+  const images = uploadedImageUrl
+    ? [...parsed.data.images, uploadedImageUrl]
+    : parsed.data.images;
+
+  if (!text && images.length === 0) {
+    return res.status(400).json({ message: 'Post text or image is required' });
+  }
 
   const post = await Post.create({
     community: communityId,
     author: req.auth.sub,
-    text: parsed.data.text,
-    images: parsed.data.images,
+    text,
+    images,
     likes: [],
   });
 

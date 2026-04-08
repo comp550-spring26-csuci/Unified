@@ -1,27 +1,25 @@
-const express = require("express");
-const router = express.Router();
-
-const { authRequired } = require("../middleware/auth");
 const uploadPostImage = require("../middleware/upload");
+const express = require("express");
+const { authRequired } = require("../middleware/auth");
+const {
+  listCommunityPosts,
+  createPost,
+  toggleLike,
+} = require("../controllers/postController");
+const {
+  listComments,
+  createComment,
+} = require("../controllers/commentController");
 
-router.post(
-  "/",
-  authRequired,
-  uploadPostImage.single("image"),
-  async (req, res) => {
-    try {
-      console.log(req.file);
-      console.log(req.body);
+const router = express.Router({ mergeParams: true });
 
-      res.json({
-        message: "Post created",
-        file: req.file,
-        body: req.body,
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
+router.use(authRequired);
+
+router.get("/", listCommunityPosts);
+router.post("/", uploadPostImage.single("image"), createPost);
+router.post("/:postId/like", toggleLike);
+
+router.get("/:postId/comments", listComments);
+router.post("/:postId/comments", createComment);
 
 module.exports = router;

@@ -109,6 +109,43 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
       </Stack>
       <Typography whiteSpace="pre-wrap">{post.text}</Typography>
 
+      {Array.isArray(post.images) && post.images.length ? (
+        <Stack spacing={1} mt={1.5}>
+          {post.images.map((imageUrl, index) => (
+            <Box
+              key={`${post._id}-image-${index}`}
+              sx={{
+                alignSelf: { xs: "stretch", sm: "flex-start" },
+                width: { xs: "100%", sm: "auto" },
+                maxWidth: { xs: "100%", sm: 440, md: 520 },
+                p: 1,
+                borderRadius: 2.5,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.paper",
+                overflow: "hidden",
+              }}
+            >
+              <Box
+                component="img"
+                src={toAbsoluteMediaUrl(imageUrl)}
+                alt={`Post image ${index + 1}`}
+                sx={{
+                  display: "block",
+                  width: "100%",
+                  height: "auto",
+                  maxHeight: { xs: 260, sm: 340 },
+                  mx: { xs: "auto", sm: 0 },
+                  objectFit: "cover",
+                  borderRadius: 1.5,
+                  bgcolor: "background.default",
+                }}
+              />
+            </Box>
+          ))}
+        </Stack>
+      ) : null}
+
       <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
         {post.event?._id && onOpenEventDetail ? (
           <Button
@@ -242,6 +279,7 @@ export default function CommunityDetail() {
     useUpdateCommunityMemberRoleMutation();
 
   const [postText, setPostText] = useState("");
+  const [postImageFile, setPostImageFile] = useState(null);
   const [postEventDetail, setPostEventDetail] = useState(null);
 
   const [eventTitle, setEventTitle] = useState("");
@@ -338,12 +376,22 @@ export default function CommunityDetail() {
     () => (eventImageFile ? URL.createObjectURL(eventImageFile) : null),
     [eventImageFile],
   );
+  const postImagePreviewUrl = useMemo(
+    () => (postImageFile ? URL.createObjectURL(postImageFile) : null),
+    [postImageFile],
+  );
 
   useEffect(() => {
     return () => {
       if (eventImageBlobUrl) URL.revokeObjectURL(eventImageBlobUrl);
     };
   }, [eventImageBlobUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (postImagePreviewUrl) URL.revokeObjectURL(postImagePreviewUrl);
+    };
+  }, [postImagePreviewUrl]);
 
   const eventPreviewUrl =
     eventImageBlobUrl ||
@@ -753,29 +801,130 @@ export default function CommunityDetail() {
             </Alert>
           ) : null}
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} mb={2}>
-            <TextField
-              fullWidth
-              label="Write a post"
-              value={postText}
-              onChange={(e) => setPostText(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={async () => {
-                try {
-                  await createPost({ communityId, text: postText }).unwrap();
-                  setPostText("");
-                  toast.success("Post created");
-                } catch (err) {
-                  toast.error(getApiErrorMessage(err, "Failed to create post"));
-                }
-              }}
-              disabled={!postText.trim()}
-            >
-              Post
-            </Button>
-          </Stack>
+          <Box
+            mb={2}
+            p={2}
+            borderRadius={2}
+            border="1px solid"
+            borderColor="divider"
+            bgcolor="background.alt"
+          >
+            <Stack spacing={1.5}>
+              {postImageFile ? (
+                <Box
+                  p={1.5}
+                  borderRadius={2}
+                  border="1px solid"
+                  borderColor="divider"
+                  bgcolor="background.paper"
+                >
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1.5}
+                    alignItems={{ sm: "center" }}
+                  >
+                    {postImagePreviewUrl ? (
+                      <Box
+                        component="img"
+                        src={postImagePreviewUrl}
+                        alt="Post preview"
+                        sx={{
+                          width: { xs: 120, sm: 140 },
+                          height: { xs: 120, sm: 100 },
+                          objectFit: "cover",
+                          borderRadius: 2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          flexShrink: 0,
+                          bgcolor: "background.default",
+                        }}
+                      />
+                    ) : null}
+                    <Stack spacing={1} flex={1} minWidth={0}>
+                      <Typography variant="subtitle2" fontWeight={700}>
+                        Selected image
+                      </Typography>
+                      <Chip
+                        label={postImageFile.name}
+                        size="small"
+                        sx={{ width: "fit-content", maxWidth: "100%" }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        This image will be attached to your post.
+                      </Typography>
+                      <Box>
+                        <Button
+                          size="small"
+                          color="error"
+                          onClick={() => setPostImageFile(null)}
+                        >
+                          Remove Image
+                        </Button>
+                      </Box>
+                    </Stack>
+                  </Stack>
+                </Box>
+              ) : null}
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1.5}
+                alignItems={{ md: "stretch" }}
+              >
+              <TextField
+                fullWidth
+                label="Write a post"
+                value={postText}
+                onChange={(e) => setPostText(e.target.value)}
+                multiline
+                minRows={3}
+                helperText="Add text, an image, or both."
+                sx={{ flex: 1 }}
+              />
+              <Stack
+                spacing={1}
+                justifyContent="flex-end"
+                sx={{ width: { xs: "100%", md: 180 }, flexShrink: 0 }}
+              >
+                <Button
+                  variant="outlined"
+                  component="label"
+                  fullWidth
+                  sx={{ minHeight: 44 }}
+                >
+                  {postImageFile ? "Change Image" : "Add Image"}
+                  <input
+                    hidden
+                    accept="image/*"
+                    type="file"
+                    onChange={(e) => setPostImageFile(e.target.files?.[0] || null)}
+                  />
+                </Button>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  sx={{ minHeight: 44 }}
+                  onClick={async () => {
+                    try {
+                      await createPost({
+                        communityId,
+                        text: postText,
+                        imageFile: postImageFile,
+                      }).unwrap();
+                      setPostText("");
+                      setPostImageFile(null);
+                      toast.success("Post created");
+                    } catch (err) {
+                      toast.error(getApiErrorMessage(err, "Failed to create post"));
+                    }
+                  }}
+                  disabled={!postText.trim() && !postImageFile}
+                >
+                  Post
+                </Button>
+              </Stack>
+              </Stack>
+            </Stack>
+          </Box>
 
           <Stack spacing={2}>
             {(postsQ.data?.posts || []).map((p) => (
