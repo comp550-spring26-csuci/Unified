@@ -1,12 +1,12 @@
 const express = require("express");
 const router = express.Router();
 
-const auth = require("../middleware/auth");
+const { authRequired } = require("../middleware/auth");
 const uploadPostImage = require("../middleware/upload");
 
 router.post(
   "/",
-  auth,
+  authRequired,
   uploadPostImage.single("image"),
   async (req, res) => {
     try {
