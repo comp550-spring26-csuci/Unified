@@ -317,14 +317,14 @@ export const api = createApi({
         url: `api/communities/${communityId}/events/${eventId}/rsvp`,
         method: "POST",
       }),
-      invalidatesTags: ["Events", "Posts"],
+      invalidatesTags: ["Events", "Posts", "DashboardActivity"],
     }),
     volunteer: build.mutation({
       query: ({ communityId, eventId }) => ({
         url: `api/communities/${communityId}/events/${eventId}/volunteer`,
         method: "POST",
       }),
-      invalidatesTags: ["Events", "Posts"],
+      invalidatesTags: ["Events", "Posts", "DashboardActivity"],
     }),
   }),
 });
