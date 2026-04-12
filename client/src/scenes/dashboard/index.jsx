@@ -61,8 +61,8 @@ export default function Dashboard() {
         Recent activity
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Your last 10 actions across posts, comments, events, communities, and
-        memberships.
+        Your last 10 actions across posts, comments, events (created, RSVP, and
+        volunteering), communities, and memberships.
       </Typography>
 
       {!userId ? (
@@ -78,8 +78,8 @@ export default function Dashboard() {
       ) : activities.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography color="text.secondary">
-            No activity yet. Create a community, join one, post, comment, or add
-            an event to see it here.
+            No activity yet. Create a community, join one, post, comment, create
+            an event, or RSVP / volunteer for an event to see it here.
           </Typography>
         </Paper>
       ) : (

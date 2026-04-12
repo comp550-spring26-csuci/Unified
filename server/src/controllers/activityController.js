@@ -5,12 +5,23 @@ const Community = require('../models/Community');
 const Membership = require('../models/Membership');
 
 /**
- * Recent actions by the user (posts, comments, events, communities, memberships).
+ * Recent actions by the user (posts, comments, events, communities, memberships,
+ * event RSVPs and volunteer sign-ups). RSVP/volunteer times use the event's
+ * updatedAt (last document save), which matches the user's action when they are
+ * the one who toggled.
  */
 async function listMyRecentActivity(req, res) {
   const userId = req.auth.sub;
 
-  const [posts, comments, events, createdCommunities, memberships] = await Promise.all([
+  const [
+    posts,
+    comments,
+    createdEvents,
+    rsvpEvents,
+    volunteerEvents,
+    createdCommunities,
+    memberships,
+  ] = await Promise.all([
     Post.find({ author: userId })
       .sort({ createdAt: -1 })
       .limit(12)
@@ -32,6 +43,18 @@ async function listMyRecentActivity(req, res) {
       .limit(12)
       .populate('community', 'name')
       .select('createdAt title community')
+      .lean(),
+    Event.find({ attendees: userId })
+      .sort({ updatedAt: -1 })
+      .limit(12)
+      .populate('community', 'name')
+      .select('updatedAt createdAt title community')
+      .lean(),
+    Event.find({ volunteers: userId })
+      .sort({ updatedAt: -1 })
+      .limit(12)
+      .populate('community', 'name')
+      .select('updatedAt createdAt title community')
       .lean(),
     Community.find({ createdBy: userId })
       .sort({ createdAt: -1 })
@@ -71,11 +94,31 @@ async function listMyRecentActivity(req, res) {
     });
   });
 
-  events.forEach((e) => {
+  createdEvents.forEach((e) => {
     const cname = e.community?.name || 'a community';
     items.push({
       at: e.createdAt,
       action: 'Created event',
+      detail: `"${e.title || 'Untitled'}" in ${cname}`,
+    });
+  });
+
+  rsvpEvents.forEach((e) => {
+    const cname = e.community?.name || 'a community';
+    const at = e.updatedAt || e.createdAt;
+    items.push({
+      at,
+      action: "RSVP'd",
+      detail: `"${e.title || 'Untitled'}" in ${cname}`,
+    });
+  });
+
+  volunteerEvents.forEach((e) => {
+    const cname = e.community?.name || 'a community';
+    const at = e.updatedAt || e.createdAt;
+    items.push({
+      at,
+      action: 'Volunteering',
       detail: `"${e.title || 'Untitled'}" in ${cname}`,
     });
   });
