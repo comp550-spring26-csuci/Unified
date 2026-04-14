@@ -55,7 +55,7 @@ async function requireApprovedMember(userId, communityId) {
   if (community.status !== 'approved') return { ok: false, status: 403, message: 'Community not approved' };
   const membership = await Membership.findOne({ user: userId, community: communityId, status: 'approved' });
   if (!membership) return { ok: false, status: 403, message: 'Membership required' };
-  return { ok: true };
+  return { ok: true, community };
 }
 
 async function listMyEvents(req, res) {
@@ -373,6 +373,28 @@ async function updateEvent(req, res) {
   return res.json({ event: populated });
 }
 
+async function deleteEvent(req, res) {
+  const { communityId, eventId } = req.params;
+  const auth = await requireApprovedMember(req.auth.sub, communityId);
+  if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
+
+  const event = await Event.findOne({ _id: eventId, community: communityId });
+  if (!event) return res.status(404).json({ message: 'Event not found' });
+
+  const isEventOwner = String(event.createdBy) === String(req.auth.sub);
+  const isCommunityOwner = String(auth.community?.createdBy || '') === String(req.auth.sub);
+  if (!isEventOwner && !isCommunityOwner) {
+    return res.status(403).json({ message: 'Only the event creator or community owner can delete this event' });
+  }
+
+  await Promise.all([
+    Post.deleteMany({ community: communityId, event: event._id }),
+    Event.deleteOne({ _id: event._id }),
+  ]);
+
+  return res.json({ success: true });
+}
+
 async function rsvp(req, res) {
   const { communityId, eventId } = req.params;
   const auth = await requireApprovedMember(req.auth.sub, communityId);
@@ -454,6 +476,7 @@ module.exports = {
   listCommunityEvents,
   createEvent,
   updateEvent,
+  deleteEvent,
   rsvp,
   volunteer,
   getEventOwnerDetails,

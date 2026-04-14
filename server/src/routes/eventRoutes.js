@@ -7,6 +7,7 @@ const {
   listCommunityEvents,
   createEvent,
   updateEvent,
+  deleteEvent,
   rsvp,
   volunteer,
   getEventOwnerDetails,
@@ -35,6 +36,7 @@ router.use(authRequired);
 router.get('/', listCommunityEvents);
 router.post('/', upload.single('image'), createEvent);
 router.patch('/:eventId', upload.single('image'), updateEvent);
+router.delete('/:eventId', deleteEvent);
 router.get('/:eventId/owner', getEventOwnerDetails);
 router.post('/:eventId/rsvp', rsvp);
 router.post('/:eventId/volunteer', volunteer);

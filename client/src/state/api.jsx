@@ -312,6 +312,13 @@ export const api = createApi({
       },
       invalidatesTags: ["Events"],
     }),
+    deleteEvent: build.mutation({
+      query: ({ communityId, eventId }) => ({
+        url: `api/communities/${communityId}/events/${eventId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Events", "Posts", "DashboardActivity"],
+    }),
     rsvp: build.mutation({
       query: ({ communityId, eventId }) => ({
         url: `api/communities/${communityId}/events/${eventId}/rsvp`,
@@ -363,6 +370,7 @@ export const {
   useLazyGetEventOwnerDetailQuery,
   useCreateEventMutation,
   useUpdateEventMutation,
+  useDeleteEventMutation,
   useRsvpMutation,
   useVolunteerMutation,
 } = api;
