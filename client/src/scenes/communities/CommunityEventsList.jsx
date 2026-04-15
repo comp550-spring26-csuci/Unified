@@ -19,11 +19,16 @@ import {
 } from "@mui/icons-material";
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { useLazyGetEventOwnerDetailQuery } from "@state/api";
+import { toast } from "react-toastify";
+import {
+  useDeleteEventMutation,
+  useLazyGetEventOwnerDetailQuery,
+} from "@state/api";
 import EventDetailsDialog from "./EventDetailsDialog";
 import EventRsvpVolunteerActions from "./EventRsvpVolunteerActions";
 import { normalizeId, toAbsoluteMediaUrl } from "./communityEventShared";
 import { formatCommunityTagList } from "../../constants/communityTags";
+import { getApiErrorMessage } from "../../utils/apiError";
 
 export default function CommunityEventsList({
   communityId,
@@ -39,6 +44,7 @@ export default function CommunityEventsList({
   const [mapDialogEventId, setMapDialogEventId] = useState(null);
   const [eventDetailsDialogId, setEventDetailsDialogId] = useState(null);
   const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
+  const [deleteEvent] = useDeleteEventMutation();
   const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
   const navigate = useNavigate();
 
@@ -289,6 +295,33 @@ export default function CommunityEventsList({
                       }
                     >
                       Edit
+                    </Button>
+                  ) : null}
+                  {normalizeId(ev.createdBy) === userId || isCommunityOwner ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          `Delete "${ev.title}"? This cannot be undone.`,
+                        );
+                        if (!confirmed) return;
+
+                        try {
+                          await deleteEvent({
+                            communityId: resolveCommunityId(ev),
+                            eventId: ev._id,
+                          }).unwrap();
+                          toast.success("Event deleted");
+                        } catch (err) {
+                          toast.error(
+                            getApiErrorMessage(err, "Failed to delete event"),
+                          );
+                        }
+                      }}
+                    >
+                      Delete
                     </Button>
                   ) : null}
                   <EventRsvpVolunteerActions
