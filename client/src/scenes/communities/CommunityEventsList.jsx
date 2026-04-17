@@ -3,6 +3,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -119,9 +120,13 @@ export default function CommunityEventsList({
                       </Typography>
                     ) : null}
                   </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Event
-                  </Typography>
+                  {ev.isDeleted ? (
+                    <Chip size="small" color="error" variant="outlined" label="Deleted" />
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">
+                      Event
+                    </Typography>
+                  )}
                 </Stack>
                 {ev.description ? (
                   <Typography mt={1}>{ev.description}</Typography>
@@ -284,7 +289,9 @@ export default function CommunityEventsList({
                   >
                     Details
                   </Button>
-                  {showEventEdit && normalizeId(ev.createdBy) === userId ? (
+                  {showEventEdit &&
+                  !ev.isDeleted &&
+                  normalizeId(ev.createdBy) === userId ? (
                     <Button
                       size="small"
                       variant="outlined"
@@ -297,7 +304,8 @@ export default function CommunityEventsList({
                       Edit
                     </Button>
                   ) : null}
-                  {normalizeId(ev.createdBy) === userId || isCommunityOwner ? (
+                  {!ev.isDeleted &&
+                  (normalizeId(ev.createdBy) === userId || isCommunityOwner) ? (
                     <Button
                       size="small"
                       variant="outlined"
@@ -324,10 +332,12 @@ export default function CommunityEventsList({
                       Delete
                     </Button>
                   ) : null}
-                  <EventRsvpVolunteerActions
-                    ev={ev}
-                    communityId={resolveCommunityId(ev)}
-                  />
+                  {!ev.isDeleted ? (
+                    <EventRsvpVolunteerActions
+                      ev={ev}
+                      communityId={resolveCommunityId(ev)}
+                    />
+                  ) : null}
                   {Number.isFinite(ev?.location?.lat) &&
                   Number.isFinite(ev?.location?.lng) ? (
                     <Button

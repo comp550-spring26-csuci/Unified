@@ -17,6 +17,9 @@ const eventSchema = new mongoose.Schema(
       lng: { type: Number, min: -180, max: 180 },
     },
     imageUrl: { type: String, trim: true },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     agenda: {
       startOffsetMinutes: { type: Number, default: 0 },
       items: [

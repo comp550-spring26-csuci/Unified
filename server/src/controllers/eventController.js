@@ -112,6 +112,7 @@ async function listVolunteerOpportunities(req, res) {
   const now = new Date();
   const filter = {
     community: { $in: communityIds },
+    isDeleted: { $ne: true },
     date: { $gte: now },
   };
 
@@ -151,7 +152,7 @@ async function listCommunityEvents(req, res) {
   const auth = await requireApprovedMember(req.auth.sub, communityId);
   if (!auth.ok) return res.status(auth.status).json({ message: auth.message });
 
-  const events = await Event.find({ community: communityId })
+  const events = await Event.find({ community: communityId, isDeleted: { $ne: true } })
     .sort({ date: 1 })
     .limit(200)
     .populate('createdBy', 'name')
@@ -380,6 +381,7 @@ async function deleteEvent(req, res) {
 
   const event = await Event.findOne({ _id: eventId, community: communityId });
   if (!event) return res.status(404).json({ message: 'Event not found' });
+  if (event.isDeleted) return res.status(404).json({ message: 'Event not found' });
 
   const isEventOwner = String(event.createdBy) === String(req.auth.sub);
   const isCommunityOwner = String(auth.community?.createdBy || '') === String(req.auth.sub);
@@ -387,12 +389,18 @@ async function deleteEvent(req, res) {
     return res.status(403).json({ message: 'Only the event creator or community owner can delete this event' });
   }
 
-  await Promise.all([
-    Post.deleteMany({ community: communityId, event: event._id }),
-    Event.deleteOne({ _id: event._id }),
-  ]);
+  if (event.isDeleted) {
+    return res.status(409).json({ message: 'Event is already deleted' });
+  }
 
-  return res.json({ success: true });
+  event.isDeleted = true;
+  event.deletedAt = new Date();
+  event.deletedBy = req.auth.sub;
+  await event.save();
+
+  await Post.deleteMany({ community: communityId, event: event._id });
+
+  return res.json({ success: true, event });
 }
 
 async function rsvp(req, res) {
@@ -402,6 +410,7 @@ async function rsvp(req, res) {
 
   const event = await Event.findOne({ _id: eventId, community: communityId });
   if (!event) return res.status(404).json({ message: 'Event not found' });
+  if (event.isDeleted) return res.status(404).json({ message: 'Event not found' });
 
   const uid = String(req.auth.sub);
   const isAttending = event.attendees.map(String).includes(uid);
@@ -426,6 +435,7 @@ async function volunteer(req, res) {
 
   const event = await Event.findOne({ _id: eventId, community: communityId });
   if (!event) return res.status(404).json({ message: 'Event not found' });
+  if (event.isDeleted) return res.status(404).json({ message: 'Event not found' });
 
   const uid = String(req.auth.sub);
   const isVol = event.volunteers.map(String).includes(uid);
@@ -447,7 +457,7 @@ async function getEventOwnerDetails(req, res) {
     return res.status(403).json({ message: 'Only community owner can view event owner details' });
   }
 
-  const event = await Event.findOne({ _id: eventId, community: communityId }).populate(
+  const event = await Event.findOne({ _id: eventId, community: communityId, isDeleted: { $ne: true } }).populate(
     'createdBy',
     'name email avatarUrl country city mailingAddress interests role'
   );
