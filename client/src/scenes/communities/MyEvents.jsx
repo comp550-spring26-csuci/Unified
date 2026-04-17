@@ -59,6 +59,8 @@ export default function MyEvents() {
   const userId = normalizeId(user);
   const myCommunitiesQ = useMyCommunitiesQuery(undefined, { skip: !userId });
   const [createMenuAnchor, setCreateMenuAnchor] = useState(null);
+  const [selectedCommunityIdForCreate, setSelectedCommunityIdForCreate] =
+    useState("");
 
   const [draft, setDraft] = useState({
     from: "",
@@ -156,38 +158,96 @@ export default function MyEvents() {
           <Menu
             anchorEl={createMenuAnchor}
             open={Boolean(createMenuAnchor)}
-            onClose={() => setCreateMenuAnchor(null)}
+            onClose={() => {
+              setCreateMenuAnchor(null);
+              setSelectedCommunityIdForCreate("");
+            }}
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
+            PaperProps={{
+              sx: { minWidth: 280, maxWidth: 360 },
+            }}
           >
-            {communitiesForCreate.length === 0 ? (
-              <MenuItem disabled dense>
-                No approved communities yet
-              </MenuItem>
-            ) : null}
-            {communitiesForCreate.map((c) => {
-              const id = String(c._id || "");
-              return (
-                <MenuItem
-                  key={id || c.name}
+            <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                Select Community
+              </Typography>
+              {communitiesForCreate.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" py={1}>
+                  No approved communities yet.
+                </Typography>
+              ) : (
+                <FormGroup sx={{ maxHeight: 280, overflow: "auto", py: 0.5 }}>
+                  {communitiesForCreate.map((c) => {
+                    const id = String(c._id || "");
+                    return (
+                      <FormControlLabel
+                        key={id || c.name}
+                        sx={{ mr: 0, alignItems: "flex-start" }}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={selectedCommunityIdForCreate === id}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCommunityIdForCreate(id);
+                              } else if (selectedCommunityIdForCreate === id) {
+                                setSelectedCommunityIdForCreate("");
+                              }
+                            }}
+                          />
+                        }
+                        label={c.name || "Community"}
+                      />
+                    );
+                  })}
+                </FormGroup>
+              )}
+              <Stack
+                direction="row"
+                spacing={1}
+                justifyContent="flex-end"
+                sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: "divider" }}
+              >
+                <Button
+                  size="small"
                   onClick={() => {
                     setCreateMenuAnchor(null);
-                    navigate(`/communities/${id}?tab=create-event`);
+                    setSelectedCommunityIdForCreate("");
                   }}
                 >
-                  {c.name || "Community"}
-                </MenuItem>
-              );
-            })}
-            {communitiesForCreate.length === 0 ? (
-              <MenuItem
-                component={RouterLink}
-                to="/communities"
-                onClick={() => setCreateMenuAnchor(null)}
-              >
-                Browse communities
-              </MenuItem>
-            ) : null}
+                  Cancel
+                </Button>
+                {communitiesForCreate.length > 0 ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={!selectedCommunityIdForCreate}
+                    onClick={() => {
+                      const id = selectedCommunityIdForCreate;
+                      setCreateMenuAnchor(null);
+                      setSelectedCommunityIdForCreate("");
+                      navigate(`/communities/${id}?tab=create-event`);
+                    }}
+                  >
+                    Create event
+                  </Button>
+                ) : (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    component={RouterLink}
+                    to="/communities"
+                    onClick={() => {
+                      setCreateMenuAnchor(null);
+                      setSelectedCommunityIdForCreate("");
+                    }}
+                  >
+                    Browse communities
+                  </Button>
+                )}
+              </Stack>
+            </Box>
           </Menu>
           <Button
             component={RouterLink}
