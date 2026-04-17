@@ -13,7 +13,7 @@ export function normalizeId(value) {
 export function filterEventsUpcoming(events) {
   const now = Date.now();
   return [...(events || [])]
-    .filter((ev) => new Date(ev.date).getTime() >= now)
+    .filter((ev) => !ev?.isDeleted && new Date(ev.date).getTime() >= now)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
@@ -21,7 +21,7 @@ export function filterEventsUpcoming(events) {
 export function filterEventsPast(events) {
   const now = Date.now();
   return [...(events || [])]
-    .filter((ev) => new Date(ev.date).getTime() < now)
+    .filter((ev) => ev?.isDeleted || new Date(ev.date).getTime() < now)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
