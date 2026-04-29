@@ -1,24 +1,24 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
-const { auth } = require('../middleware/auth');
-const uploadPostImage = require('../middleware/upload');
+const { authRequired } = require("../middleware/auth");
+const uploadPostImage = require("../middleware/upload");
 
 const {
   listCommunityPosts,
   createPost,
   toggleLike,
-} = require('../controllers/postController');
+} = require("../controllers/postController");
 
-router.get('/', auth, listCommunityPosts);
+router.get("/", authRequired, listCommunityPosts);
 
 router.post(
-  '/',
-  auth,
-  uploadPostImage.single('image'),
+  "/",
+  authRequired,
+  uploadPostImage.single("image"),
   createPost
 );
 
-router.post('/:postId/like', auth, toggleLike);
+router.post("/:postId/like", authRequired, toggleLike);
 
 module.exports = router;
