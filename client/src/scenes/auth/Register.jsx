@@ -1,6 +1,8 @@
 import {
+  FormControlLabel,
   Box,
   Button,
+  Checkbox,
   Paper,
   TextField,
   Typography,
@@ -19,6 +21,12 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isBusinessOwner, setIsBusinessOwner] = useState(false);
+  const [businessName, setBusinessName] = useState("");
+  const [businessLocation, setBusinessLocation] = useState("");
+  const [businessCategory, setBusinessCategory] = useState("");
+  const [businessDescription, setBusinessDescription] = useState("");
+  const [businessServices, setBusinessServices] = useState("");
   const [error, setError] = useState("");
   const [register, { isLoading }] = useRegisterMutation();
   const dispatch = useDispatch();
@@ -29,7 +37,17 @@ export default function Register() {
     setError("");
     try {
       dispatch(api.util.resetApiState());
-      const res = await register({ name, email, password }).unwrap();
+      const res = await register({
+        name,
+        email,
+        password,
+        role: isBusinessOwner ? "business_owner" : "user",
+        businessName,
+        businessLocation,
+        businessCategory,
+        businessDescription,
+        businessServices,
+      }).unwrap();
       dispatch(setAuth({ token: res.token, user: res.user }));
       toast.success("Account created successfully");
       navigate("/dashboard");
@@ -157,6 +175,57 @@ export default function Register() {
               required
               autoComplete="new-password"
             />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isBusinessOwner}
+                  onChange={(e) => setIsBusinessOwner(e.target.checked)}
+                />
+              }
+              label="Register as a Business Owner"
+            />
+            {isBusinessOwner ? (
+              <>
+                <TextField
+                  label="Business Name"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Business Location"
+                  value={businessLocation}
+                  onChange={(e) => setBusinessLocation(e.target.value)}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Business Type / Category"
+                  value={businessCategory}
+                  onChange={(e) => setBusinessCategory(e.target.value)}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Business Description"
+                  value={businessDescription}
+                  onChange={(e) => setBusinessDescription(e.target.value)}
+                  fullWidth
+                  multiline
+                  minRows={3}
+                />
+                <TextField
+                  label="Services"
+                  value={businessServices}
+                  onChange={(e) => setBusinessServices(e.target.value)}
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  placeholder="Catering, equipment rental, venue setup, logistics..."
+                />
+              </>
+            ) : null}
 
             <Button
               type="submit"

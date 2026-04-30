@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ['user', 'community_admin', 'super_admin'],
+      enum: ['user', 'business_owner', 'community_admin', 'super_admin'],
       default: 'user',
       index: true,
     },
@@ -22,6 +22,13 @@ const userSchema = new mongoose.Schema(
     interests: [{ type: String, trim: true }],
 
     avatarUrl: { type: String, trim: true },
+    businessProfile: {
+      businessName: { type: String, trim: true, maxlength: 120 },
+      businessLocation: { type: String, trim: true, maxlength: 200 },
+      businessCategory: { type: String, trim: true, maxlength: 120 },
+      description: { type: String, trim: true, maxlength: 2000 },
+      services: { type: String, trim: true, maxlength: 2000 },
+    },
   },
   { timestamps: true }
 );

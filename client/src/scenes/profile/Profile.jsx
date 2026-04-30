@@ -4,7 +4,9 @@ import {
   Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
+  FormControlLabel,
   Paper,
   Stack,
   TextField,
@@ -13,21 +15,14 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useMeQuery, useUpdateProfileMutation } from "@state/api";
-import { setUser } from "@state";
+import { setAuth, setUser } from "@state";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
+import { toAbsoluteMediaUrl } from "../../utils/media";
 import {
   COMMUNITY_TAG_OPTIONS,
   getCommunityTagLabel,
 } from "../../constants/communityTags";
-
-const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
-
-function toAbsoluteMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
-}
 
 export default function Profile() {
   const dispatch = useDispatch();
@@ -45,6 +40,13 @@ export default function Profile() {
   const [mailingAddress, setMailingAddress] = useState("");
   const [selectedInterests, setSelectedInterests] = useState([]);
   const [avatarFile, setAvatarFile] = useState(null);
+  const [businessName, setBusinessName] = useState("");
+  const [businessLocation, setBusinessLocation] = useState("");
+  const [businessCategory, setBusinessCategory] = useState("");
+  const [businessDescription, setBusinessDescription] = useState("");
+  const [businessServices, setBusinessServices] = useState("");
+  const isBusinessOwner = me?.role === "business_owner";
+  const [upgradeToBusinessOwner, setUpgradeToBusinessOwner] = useState(false);
 
   useEffect(() => {
     if (!me) return;
@@ -53,6 +55,12 @@ export default function Profile() {
     setCity(me.city || "");
     setMailingAddress(me.mailingAddress || "");
     setSelectedInterests(Array.isArray(me.interests) ? me.interests : []);
+    setBusinessName(me.businessProfile?.businessName || "");
+    setBusinessLocation(me.businessProfile?.businessLocation || "");
+    setBusinessCategory(me.businessProfile?.businessCategory || "");
+    setBusinessDescription(me.businessProfile?.description || "");
+    setBusinessServices(me.businessProfile?.services || "");
+    setUpgradeToBusinessOwner(me?.role === "business_owner");
     setAvatarFile(null);
   }, [me]);
 
@@ -81,10 +89,22 @@ export default function Profile() {
         mailingAddress,
         interests: selectedInterests,
         avatarFile,
+        upgradeToBusinessOwner,
+        businessName,
+        businessLocation,
+        businessCategory,
+        businessDescription,
+        businessServices,
       }).unwrap();
-      dispatch(setUser(res.user));
+      if (res.token) {
+        dispatch(setAuth({ token: res.token, user: res.user }));
+      } else {
+        dispatch(setUser(res.user));
+      }
       setAvatarFile(null);
-      toast.success("Profile updated");
+      toast.success(
+        res.token ? "Account upgraded to Business Owner" : "Profile updated",
+      );
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Failed to update profile"));
     }
@@ -171,6 +191,69 @@ export default function Profile() {
               value={mailingAddress}
               onChange={(e) => setMailingAddress(e.target.value)}
             />
+            {isBusinessOwner ? null : (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={upgradeToBusinessOwner}
+                    onChange={(e) =>
+                      setUpgradeToBusinessOwner(e.target.checked)
+                    }
+                  />
+                }
+                label="Upgrade this account to Business Owner"
+              />
+            )}
+            {isBusinessOwner || upgradeToBusinessOwner ? (
+              <Paper
+                variant="outlined"
+                sx={{ p: 2, borderRadius: 2, bgcolor: "background.default" }}
+              >
+                <Stack spacing={2}>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {isBusinessOwner
+                      ? "Business profile"
+                      : "Business owner upgrade"}
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Business Name"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Business Location"
+                      value={businessLocation}
+                      onChange={(e) => setBusinessLocation(e.target.value)}
+                    />
+                  </Stack>
+                  <TextField
+                    fullWidth
+                    label="Business Type / Category"
+                    value={businessCategory}
+                    onChange={(e) => setBusinessCategory(e.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="Business Description"
+                    value={businessDescription}
+                    onChange={(e) => setBusinessDescription(e.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    label="Services"
+                    value={businessServices}
+                    onChange={(e) => setBusinessServices(e.target.value)}
+                  />
+                </Stack>
+              </Paper>
+            ) : null}
             <Autocomplete
               multiple
               options={COMMUNITY_TAG_OPTIONS}
@@ -217,7 +300,14 @@ export default function Profile() {
               <Button
                 variant="contained"
                 onClick={onSave}
-                disabled={isSaving || !name.trim()}
+                disabled={
+                  isSaving ||
+                  !name.trim() ||
+                  ((isBusinessOwner || upgradeToBusinessOwner) &&
+                    (!businessName.trim() ||
+                      !businessLocation.trim() ||
+                      !businessCategory.trim()))
+                }
               >
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>

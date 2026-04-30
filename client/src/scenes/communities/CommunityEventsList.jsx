@@ -282,6 +282,22 @@ export default function CommunityEventsList({
                   </Stack>
                 </Stack>
                 <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
+                  {ev.businessParticipationRequired ? (
+                    <Chip
+                      size="small"
+                      color={ev.acceptedBusinessBid ? "success" : "primary"}
+                      variant="outlined"
+                      label={
+                        ev.acceptedBusinessBid
+                          ? "Business selected"
+                          : ev.businessBidSubmissionOpen
+                            ? "Business bidding open"
+                            : ev.biddingDeadlinePassed
+                              ? "Business bidding closed"
+                              : "Business participation required"
+                      }
+                    />
+                  ) : null}
                   <Button
                     size="small"
                     variant="outlined"
@@ -359,6 +375,9 @@ export default function CommunityEventsList({
         open={!!eventDetailsDialogId}
         onClose={() => setEventDetailsDialogId(null)}
         evDetail={findEvent(eventDetailsDialogId)}
+        communityId={
+          eventDetailsDialogId ? resolveCommunityId(findEvent(eventDetailsDialogId) || {}) : ""
+        }
       />
 
       <Dialog

@@ -17,6 +17,8 @@ import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
+  useBusinessOpportunitiesQuery,
+  useListCommunitiesQuery,
   useMyCommunitiesQuery,
   useVolunteerOpportunitiesQuery,
 } from "@state/api";
@@ -57,7 +59,11 @@ export default function MyEvents() {
   const navigate = useNavigate();
   const user = useSelector((s) => s.global.user);
   const userId = normalizeId(user);
+  const isBusinessOwner = user?.role === "business_owner";
   const myCommunitiesQ = useMyCommunitiesQuery(undefined, { skip: !userId });
+  const allCommunitiesQ = useListCommunitiesQuery(undefined, {
+    skip: !userId || !isBusinessOwner,
+  });
   const [createMenuAnchor, setCreateMenuAnchor] = useState(null);
   const [selectedCommunityIdForCreate, setSelectedCommunityIdForCreate] =
     useState("");
@@ -72,8 +78,13 @@ export default function MyEvents() {
   const [filterCreated, setFilterCreated] = useState(false);
   const [filterAttending, setFilterAttending] = useState(false);
   const [filterVolunteering, setFilterVolunteering] = useState(false);
+  const [filterBusinessOpportunities, setFilterBusinessOpportunities] =
+    useState(false);
 
   const oppQ = useVolunteerOpportunitiesQuery(applied, { skip: !userId });
+  const businessOppQ = useBusinessOpportunitiesQuery(applied, {
+    skip: !userId || !isBusinessOwner || !filterBusinessOpportunities,
+  });
 
   const communitiesForCreate = useMemo(() => {
     const list = myCommunitiesQ.data?.communities || [];
@@ -83,17 +94,25 @@ export default function MyEvents() {
   }, [myCommunitiesQ.data?.communities]);
 
   const communityOptions = useMemo(
-    () => myCommunitiesQ.data?.communities || [],
-    [myCommunitiesQ.data?.communities],
+    () =>
+      filterBusinessOpportunities
+        ? allCommunitiesQ.data?.communities || []
+        : myCommunitiesQ.data?.communities || [],
+    [
+      allCommunitiesQ.data?.communities,
+      filterBusinessOpportunities,
+      myCommunitiesQ.data?.communities,
+    ],
   );
 
-  const errMsg = oppQ.error?.data?.message || oppQ.error?.error;
+  const activeQuery = filterBusinessOpportunities ? businessOppQ : oppQ;
+  const errMsg = activeQuery.error?.data?.message || activeQuery.error?.error;
 
   const communityIdForEvent = (ev) =>
     String(ev.community?._id || ev.community || "");
 
   const filteredEvents = useMemo(() => {
-    const raw = oppQ.data?.events || [];
+    const raw = activeQuery.data?.events || [];
     const upcoming = filterEventsUpcoming(raw);
     return applyParticipationFilters(upcoming, userId, {
       volunteerOnly: filterVolunteerOnly,
@@ -102,7 +121,7 @@ export default function MyEvents() {
       volunteering: filterVolunteering,
     });
   }, [
-    oppQ.data?.events,
+    activeQuery.data?.events,
     userId,
     filterVolunteerOnly,
     filterCreated,
@@ -117,6 +136,7 @@ export default function MyEvents() {
     setFilterCreated(false);
     setFilterAttending(false);
     setFilterVolunteering(false);
+    setFilterBusinessOpportunities(false);
   };
 
   if (!userId) {
@@ -260,9 +280,9 @@ export default function MyEvents() {
         </Stack>
       </Box>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        All upcoming events in communities you belong to (soonest first). Use
-        the filters below to narrow by date, community, or how you relate to an
-        event.
+        {filterBusinessOpportunities
+          ? "Business-opportunity events that match your business profile. Use the filters below to narrow by date, community, or how you relate to an event."
+          : "All upcoming events in communities you belong to (soonest first). Use the filters below to narrow by date, community, or how you relate to an event."}
       </Typography>
 
       <Box
@@ -285,7 +305,11 @@ export default function MyEvents() {
             }
           >
             <MenuItem value="">
-              <em>All my communities</em>
+              <em>
+                {filterBusinessOpportunities
+                  ? "All communities"
+                  : "All my communities"}
+              </em>
             </MenuItem>
             {communityOptions.map((c) => (
               <MenuItem key={c._id} value={String(c._id)}>
@@ -365,6 +389,20 @@ export default function MyEvents() {
               }
               label={"Events I'm volunteering for"}
             />
+            {isBusinessOwner ? (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={filterBusinessOpportunities}
+                    onChange={(e) =>
+                      setFilterBusinessOpportunities(e.target.checked)
+                    }
+                  />
+                }
+                label="Business opportunities"
+              />
+            ) : null}
           </FormGroup>
           <Typography variant="caption" color="text.secondary" display="block">
             When any of the boxes above are checked, the list shows events that
@@ -400,7 +438,7 @@ export default function MyEvents() {
         </Alert>
       ) : null}
 
-      {oppQ.isLoading ? (
+      {activeQuery.isLoading ? (
         <Box display="flex" justifyContent="center" py={4}>
           <CircularProgress />
         </Box>

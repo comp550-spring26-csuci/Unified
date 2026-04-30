@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 
+const businessBidSchema = new mongoose.Schema(
+  {
+    businessOwner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    businessName: { type: String, required: true, trim: true, maxlength: 120 },
+    businessLocation: { type: String, required: true, trim: true, maxlength: 200 },
+    businessCategory: { type: String, required: true, trim: true, maxlength: 120 },
+    proposal: { type: String, required: true, trim: true, maxlength: 4000 },
+    pricing: { type: String, trim: true, maxlength: 200 },
+    additionalNotes: { type: String, trim: true, maxlength: 2000 },
+    status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending' },
+  },
+  { timestamps: true }
+);
+
 const eventSchema = new mongoose.Schema(
   {
     community: { type: mongoose.Schema.Types.ObjectId, ref: 'Community', required: true, index: true },
@@ -30,6 +44,13 @@ const eventSchema = new mongoose.Schema(
         },
       ],
     },
+    businessParticipationRequired: { type: Boolean, default: false, index: true },
+    businessCategoriesNeeded: [{ type: String, trim: true, maxlength: 80 }],
+    businessRequirements: { type: String, trim: true, maxlength: 2000, default: '' },
+    biddingDeadline: { type: Date },
+    businessBids: [businessBidSchema],
+    acceptedBusinessBidId: { type: mongoose.Schema.Types.ObjectId },
+    businessBiddingClosedAt: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
     attendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -45,5 +66,6 @@ eventSchema.virtual('attendeeCount').get(function () {
 eventSchema.set('toJSON', { virtuals: true });
 
 eventSchema.index({ community: 1, date: 1 });
+eventSchema.index({ businessParticipationRequired: 1, biddingDeadline: 1, date: 1 });
 
 module.exports = mongoose.model('Event', eventSchema);

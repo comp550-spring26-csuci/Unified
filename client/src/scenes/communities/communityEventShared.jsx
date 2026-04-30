@@ -1,6 +1,8 @@
 import { Stack, Typography } from "@mui/material";
+import { getApiBaseUrl, toAbsoluteMediaUrl } from "../../utils/media";
 
-export const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
+export const API_BASE = getApiBaseUrl();
+export { toAbsoluteMediaUrl };
 
 export function normalizeId(value) {
   if (!value) return "";
@@ -23,12 +25,6 @@ export function filterEventsPast(events) {
   return [...(events || [])]
     .filter((ev) => ev?.isDeleted || new Date(ev.date).getTime() < now)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
-}
-
-export function toAbsoluteMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 export function MetaRow({ icon, label, value }) {

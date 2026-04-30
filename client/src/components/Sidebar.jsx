@@ -29,14 +29,7 @@ import { useMyCommunitiesQuery } from "@state/api";
 
 import FlexBetween from "./FlexBetween";
 import UnifiedBrand from "./UnifiedBrand";
-
-const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
-
-function toAbsoluteMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
-}
+import { toAbsoluteMediaUrl } from "../utils/media";
 
 const Sidebar = ({
   user,
