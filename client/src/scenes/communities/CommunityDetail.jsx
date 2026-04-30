@@ -291,6 +291,12 @@ export default function CommunityDetail() {
   const [eventWhatToBring, setEventWhatToBring] = useState("");
   const [eventVolunteerRequirements, setEventVolunteerRequirements] =
     useState("");
+  const [businessParticipationRequired, setBusinessParticipationRequired] =
+    useState(false);
+  const [businessCategoriesNeededText, setBusinessCategoriesNeededText] =
+    useState("");
+  const [businessRequirements, setBusinessRequirements] = useState("");
+  const [biddingDeadline, setBiddingDeadline] = useState("");
   const [eventCapacity, setEventCapacity] = useState("");
   const [showCreateEventErrors, setShowCreateEventErrors] = useState(false);
   const [eventImageFile, setEventImageFile] = useState(null);
@@ -417,11 +423,46 @@ export default function CommunityDetail() {
     return endMs >= startMs;
   }, [eventEndDate, eventDate]);
 
+  const businessCategoriesNeeded = useMemo(
+    () =>
+      businessCategoriesNeededText
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    [businessCategoriesNeededText],
+  );
+
+  const createEventBusinessOk = useMemo(() => {
+    if (!businessParticipationRequired) return true;
+    if (!businessCategoriesNeeded.length) return false;
+    if (!biddingDeadline.trim()) return false;
+    const biddingDeadlineMs = new Date(biddingDeadline).getTime();
+    if (Number.isNaN(biddingDeadlineMs)) return false;
+    const startMs = new Date(eventDate).getTime();
+    if (Number.isNaN(startMs)) return false;
+    return biddingDeadlineMs > Date.now() && biddingDeadlineMs <= startMs;
+  }, [
+    biddingDeadline,
+    businessCategoriesNeeded,
+    businessParticipationRequired,
+    eventDate,
+  ]);
+
   useEffect(() => {
-    if (createEventRequiredOk && createEventEndOk && showCreateEventErrors) {
+    if (
+      createEventRequiredOk &&
+      createEventEndOk &&
+      createEventBusinessOk &&
+      showCreateEventErrors
+    ) {
       setShowCreateEventErrors(false);
     }
-  }, [createEventRequiredOk, createEventEndOk, showCreateEventErrors]);
+  }, [
+    createEventBusinessOk,
+    createEventRequiredOk,
+    createEventEndOk,
+    showCreateEventErrors,
+  ]);
 
   const upcomingEvents = useMemo(
     () => filterEventsUpcoming(eventsQ.data?.events || []),
@@ -574,6 +615,16 @@ export default function CommunityDetail() {
     setEventWhoFor(ev.whoFor || "");
     setEventWhatToBring(ev.whatToBring || "");
     setEventVolunteerRequirements(ev.volunteerRequirements || "");
+    setBusinessParticipationRequired(Boolean(ev.businessParticipationRequired));
+    setBusinessCategoriesNeededText(
+      Array.isArray(ev.businessCategoriesNeeded)
+        ? ev.businessCategoriesNeeded.join(", ")
+        : "",
+    );
+    setBusinessRequirements(ev.businessRequirements || "");
+    setBiddingDeadline(
+      ev.biddingDeadline ? toDateTimeLocalFromDate(ev.biddingDeadline) : "",
+    );
     setEventCapacity(String(ev.capacity ?? ""));
     setEventImageFile(null);
     setExistingEventImageUrl(ev.imageUrl || "");
@@ -1605,6 +1656,77 @@ export default function CommunityDetail() {
               />
             </Box>
 
+            <Box
+              mb={2}
+              p={2}
+              borderRadius={2}
+              border="1px solid"
+              borderColor="divider"
+              bgcolor="background.default"
+            >
+              <Typography variant="subtitle1" fontWeight={700} mb={1}>
+                Business participation
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={businessParticipationRequired}
+                    onChange={(e) =>
+                      setBusinessParticipationRequired(e.target.checked)
+                    }
+                  />
+                }
+                label="This event requires business participation"
+                sx={{ mb: businessParticipationRequired ? 1 : 0 }}
+              />
+              {businessParticipationRequired ? (
+                <Stack spacing={2}>
+                  <TextField
+                    fullWidth
+                    label="Business type / category needed"
+                    value={businessCategoriesNeededText}
+                    onChange={(e) =>
+                      setBusinessCategoriesNeededText(e.target.value)
+                    }
+                    placeholder="Catering, photography, logistics"
+                    error={
+                      showCreateEventErrors && !businessCategoriesNeeded.length
+                    }
+                    helperText="Comma-separated categories."
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="Requirements / expectations"
+                    value={businessRequirements}
+                    onChange={(e) => setBusinessRequirements(e.target.value)}
+                    placeholder="What you need from the business for this event."
+                  />
+                  <TextField
+                    fullWidth
+                    type="datetime-local"
+                    label="Bidding deadline"
+                    value={biddingDeadline}
+                    onChange={(e) => setBiddingDeadline(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ step: 60 }}
+                    error={showCreateEventErrors && !createEventBusinessOk}
+                    helperText={
+                      showCreateEventErrors && !createEventBusinessOk
+                        ? !businessCategoriesNeeded.length
+                          ? "Enter at least one business category."
+                          : !biddingDeadline.trim() ||
+                              Number.isNaN(new Date(biddingDeadline).getTime())
+                            ? "Enter a valid bidding deadline."
+                            : "Bidding deadline must be in the future and on or before the event start."
+                        : "Businesses can bid until this date and time."
+                    }
+                  />
+                </Stack>
+              ) : null}
+            </Box>
+
             <Stack
               direction={{ xs: "column", sm: "row" }}
               spacing={1.5}
@@ -1713,6 +1835,10 @@ export default function CommunityDetail() {
                   setEventWhoFor("");
                   setEventWhatToBring("");
                   setEventVolunteerRequirements("");
+                  setBusinessParticipationRequired(false);
+                  setBusinessCategoriesNeededText("");
+                  setBusinessRequirements("");
+                  setBiddingDeadline("");
                   setEventCapacity("");
                   setEventImageFile(null);
                   setEventLocation(null);
@@ -1746,6 +1872,13 @@ export default function CommunityDetail() {
                     );
                     return;
                   }
+                  if (!createEventBusinessOk) {
+                    setShowCreateEventErrors(true);
+                    toast.error(
+                      "Check the business bidding fields before saving this event.",
+                    );
+                    return;
+                  }
                   const payload = {
                     title: eventTitle.trim(),
                     description: eventDescription,
@@ -1763,6 +1896,15 @@ export default function CommunityDetail() {
                     latitude: eventLocation?.lat,
                     longitude: eventLocation?.lng,
                     imageFile: eventImageFile,
+                    businessParticipationRequired,
+                    businessCategoriesNeeded,
+                    businessRequirements,
+                    biddingDeadline:
+                      businessParticipationRequired &&
+                      biddingDeadline.trim() &&
+                      !Number.isNaN(new Date(biddingDeadline).getTime())
+                        ? new Date(biddingDeadline).toISOString()
+                        : undefined,
                     agenda: {
                       startOffsetMinutes: agendaFirstOffsetMinutes,
                       items: agendaItems.map((it) => ({
@@ -1806,6 +1948,10 @@ export default function CommunityDetail() {
                     setEventWhoFor("");
                     setEventWhatToBring("");
                     setEventVolunteerRequirements("");
+                    setBusinessParticipationRequired(false);
+                    setBusinessCategoriesNeededText("");
+                    setBusinessRequirements("");
+                    setBiddingDeadline("");
                     setEventCapacity("");
                     setEventImageFile(null);
                     setEventLocation(null);
@@ -1839,6 +1985,7 @@ export default function CommunityDetail() {
         open={!!postEventDetail}
         onClose={() => setPostEventDetail(null)}
         evDetail={postEventDetail}
+        communityId={communityId}
       />
     </Box>
   );

@@ -1,9 +1,10 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { getApiBaseUrl } from "../utils/media";
 
 export const api = createApi({
   reducerPath: "ucaApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001",
+    baseUrl: getApiBaseUrl(),
     prepareHeaders: (headers, { getState }) => {
       const token =
         getState()?.global?.token || localStorage.getItem("uca_token");
@@ -28,7 +29,21 @@ export const api = createApi({
   endpoints: (build) => ({
     // Auth
     register: build.mutation({
-      query: (body) => ({ url: "api/auth/register", method: "POST", body }),
+      query: (payload) => ({
+        url: "api/auth/register",
+        method: "POST",
+        body: {
+          name: payload?.name || "",
+          email: payload?.email || "",
+          password: payload?.password || "",
+          role: payload?.role || "user",
+          businessName: payload?.businessName || "",
+          businessLocation: payload?.businessLocation || "",
+          businessCategory: payload?.businessCategory || "",
+          businessDescription: payload?.businessDescription || "",
+          businessServices: payload?.businessServices || "",
+        },
+      }),
     }),
     login: build.mutation({
       query: (body) => ({ url: "api/auth/login", method: "POST", body }),
@@ -64,7 +79,24 @@ export const api = createApi({
         formData.append("country", payload?.country || "");
         formData.append("city", payload?.city || "");
         formData.append("mailingAddress", payload?.mailingAddress || "");
-        formData.append("interests", Array.isArray(payload?.interests) ? payload.interests.join(",") : payload?.interests || "");
+        formData.append(
+          "interests",
+          Array.isArray(payload?.interests)
+            ? payload.interests.join(",")
+            : payload?.interests || "",
+        );
+        formData.append(
+          "upgradeToBusinessOwner",
+          String(Boolean(payload?.upgradeToBusinessOwner)),
+        );
+        formData.append("businessName", payload?.businessName || "");
+        formData.append("businessLocation", payload?.businessLocation || "");
+        formData.append("businessCategory", payload?.businessCategory || "");
+        formData.append(
+          "businessDescription",
+          payload?.businessDescription || "",
+        );
+        formData.append("businessServices", payload?.businessServices || "");
         if (payload?.avatarFile) formData.append("avatar", payload.avatarFile);
         return {
           url: "api/auth/me",
@@ -234,6 +266,17 @@ export const api = createApi({
       },
       providesTags: ["Events"],
     }),
+    businessOpportunities: build.query({
+      query: (arg = {}) => {
+        const params = {};
+        if (arg.q?.trim()) params.q = arg.q.trim();
+        if (arg.from?.trim()) params.from = arg.from.trim();
+        if (arg.to?.trim()) params.to = arg.to.trim();
+        if (arg.communityId?.trim()) params.communityId = arg.communityId.trim();
+        return { url: "api/me/business-opportunities", params };
+      },
+      providesTags: ["Events"],
+    }),
     getEventOwnerDetail: build.query({
       query: ({ communityId, eventId }) =>
         `api/communities/${communityId}/events/${eventId}/owner`,
@@ -263,6 +306,23 @@ export const api = createApi({
         }
         if (payload?.imageUrl) formData.append("imageUrl", payload.imageUrl);
         if (payload?.imageFile) formData.append("image", payload.imageFile);
+        formData.append(
+          "businessParticipationRequired",
+          String(Boolean(payload?.businessParticipationRequired)),
+        );
+        if (payload?.businessCategoriesNeeded?.length) {
+          formData.append(
+            "businessCategoriesNeeded",
+            payload.businessCategoriesNeeded.join(","),
+          );
+        }
+        formData.append(
+          "businessRequirements",
+          payload?.businessRequirements || "",
+        );
+        if (payload?.biddingDeadline) {
+          formData.append("biddingDeadline", payload.biddingDeadline);
+        }
         if (payload?.agenda != null) {
           formData.append("agenda", JSON.stringify(payload.agenda));
         }
@@ -300,6 +360,23 @@ export const api = createApi({
         }
         if (payload?.imageUrl) formData.append("imageUrl", payload.imageUrl);
         if (payload?.imageFile) formData.append("image", payload.imageFile);
+        formData.append(
+          "businessParticipationRequired",
+          String(Boolean(payload?.businessParticipationRequired)),
+        );
+        if (payload?.businessCategoriesNeeded?.length) {
+          formData.append(
+            "businessCategoriesNeeded",
+            payload.businessCategoriesNeeded.join(","),
+          );
+        }
+        formData.append(
+          "businessRequirements",
+          payload?.businessRequirements || "",
+        );
+        if (payload?.biddingDeadline) {
+          formData.append("biddingDeadline", payload.biddingDeadline);
+        }
         if (payload?.agenda != null) {
           formData.append("agenda", JSON.stringify(payload.agenda));
         }
@@ -332,6 +409,25 @@ export const api = createApi({
         method: "POST",
       }),
       invalidatesTags: ["Events", "Posts", "DashboardActivity"],
+    }),
+    submitBusinessBid: build.mutation({
+      query: ({ communityId, eventId, payload }) => ({
+        url: `api/communities/${communityId}/events/${eventId}/bids`,
+        method: "POST",
+        body: {
+          proposal: payload?.proposal || "",
+          pricing: payload?.pricing || "",
+          additionalNotes: payload?.additionalNotes || "",
+        },
+      }),
+      invalidatesTags: ["Events"],
+    }),
+    acceptBusinessBid: build.mutation({
+      query: ({ communityId, eventId, bidId }) => ({
+        url: `api/communities/${communityId}/events/${eventId}/bids/${bidId}/accept`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Events"],
     }),
   }),
 });
@@ -367,11 +463,14 @@ export const {
   useListEventsQuery,
   useMyEventsQuery,
   useVolunteerOpportunitiesQuery,
+  useBusinessOpportunitiesQuery,
   useLazyGetEventOwnerDetailQuery,
   useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,
   useRsvpMutation,
   useVolunteerMutation,
+  useSubmitBusinessBidMutation,
+  useAcceptBusinessBidMutation,
 } = api;
 

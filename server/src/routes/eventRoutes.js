@@ -10,6 +10,8 @@ const {
   deleteEvent,
   rsvp,
   volunteer,
+  submitBusinessBid,
+  acceptBusinessBid,
   getEventOwnerDetails,
 } = require('../controllers/eventController');
 
@@ -40,5 +42,7 @@ router.delete('/:eventId', deleteEvent);
 router.get('/:eventId/owner', getEventOwnerDetails);
 router.post('/:eventId/rsvp', rsvp);
 router.post('/:eventId/volunteer', volunteer);
+router.post('/:eventId/bids', submitBusinessBid);
+router.post('/:eventId/bids/:bidId/accept', acceptBusinessBid);
 
 module.exports = router;

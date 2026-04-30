@@ -19,14 +19,7 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-
-const API_BASE = import.meta.env.VITE_APP_BASE_URL || "http://localhost:5001";
-
-function toAbsoluteMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
-}
+import { toAbsoluteMediaUrl } from "../utils/media";
 
 const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
   const dispatch = useDispatch();

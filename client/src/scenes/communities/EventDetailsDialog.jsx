@@ -30,8 +30,14 @@ import {
   toAbsoluteMediaUrl,
   toDateTimeLocalFromDate,
 } from "./communityEventShared";
+import EventBusinessBiddingSection from "./EventBusinessBiddingSection";
 
-export default function EventDetailsDialog({ open, onClose, evDetail }) {
+export default function EventDetailsDialog({
+  open,
+  onClose,
+  evDetail,
+  communityId,
+}) {
   return (
     <Dialog
       open={open}
@@ -207,6 +213,13 @@ export default function EventDetailsDialog({ open, onClose, evDetail }) {
                     ) : null}
                   </Stack>
                 </Box>
+              ) : null}
+
+              {evDetail.businessParticipationRequired ? (
+                <EventBusinessBiddingSection
+                  communityId={communityId}
+                  event={evDetail}
+                />
               ) : null}
 
               {agendaItems.length > 0 ? (
