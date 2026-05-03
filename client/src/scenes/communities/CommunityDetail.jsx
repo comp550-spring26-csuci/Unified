@@ -4,6 +4,7 @@ import {
   AccordionSummary,
   Alert,
   Box,
+  Button,
   Checkbox,
   Chip,
   Dialog,
@@ -86,22 +87,16 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [createComment] = useCreateCommentMutation();
+
   const commentsQ = useListCommentsQuery(
     { communityId, postId: post._id },
-    { skip: !commentsOpen },
+    { skip: !commentsOpen }
   );
 
   return (
     <Box p={2} borderRadius={2} bgcolor="background.alt">
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={1}
-      >
-        <Typography fontWeight={700}>
-          {post.author?.name || "Unknown"}
-        </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography fontWeight={700}>{post.author?.name || "Unknown"}</Typography>
         <Typography variant="caption" color="text.secondary">
           {new Date(post.createdAt).toLocaleString()}
         </Typography>
@@ -109,10 +104,10 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
 
       <Typography whiteSpace="pre-wrap">{post.text}</Typography>
 
-      {post.image ? (
+      {post.images?.length > 0 ? (
         <Box
           component="img"
-          src={toAbsoluteMediaUrl(post.image)}
+          src={toAbsoluteMediaUrl(post.images[0])}
           alt="Post"
           sx={{
             mt: 1.5,
@@ -129,14 +124,11 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
 
       <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
         {post.event?._id && onOpenEventDetail ? (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => onOpenEventDetail(post.event)}
-          >
+          <Button size="small" variant="outlined" onClick={() => onOpenEventDetail(post.event)}>
             Details
           </Button>
         ) : null}
+
         <Button
           size="small"
           variant="outlined"
@@ -151,6 +143,7 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
         >
           Like ({post.likes?.length || 0})
         </Button>
+
         <Button
           size="small"
           variant="outlined"
@@ -176,24 +169,10 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
 
           <Stack spacing={1} mb={1}>
             {(commentsQ.data?.comments || []).map((comment) => (
-              <Box
-                key={comment._id}
-                p={1.2}
-                borderRadius={1.5}
-                bgcolor="background.paper"
-              >
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <Typography variant="body2" fontWeight={700}>
-                    {comment.author?.name || "Unknown"}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(comment.createdAt).toLocaleString()}
-                  </Typography>
-                </Stack>
+              <Box key={comment._id} p={1.2} borderRadius={1.5} bgcolor="background.paper">
+                <Typography variant="body2" fontWeight={700}>
+                  {comment.author?.name || "Unknown"}
+                </Typography>
                 <Typography variant="body2" mt={0.4}>
                   {comment.text}
                 </Typography>
@@ -209,6 +188,7 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
             />
+
             <Button
               variant="contained"
               onClick={async () => {
@@ -218,12 +198,11 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
                     postId: post._id,
                     text: commentText,
                   }).unwrap();
+
                   setCommentText("");
                   toast.success("Comment posted");
                 } catch (err) {
-                  toast.error(
-                    getApiErrorMessage(err, "Failed to post comment"),
-                  );
+                  toast.error(getApiErrorMessage(err, "Failed to post comment"));
                 }
               }}
               disabled={!commentText.trim()}
@@ -1719,52 +1698,97 @@ export default function CommunityDetail() {
                     },
                   };
                   try {
-                    if (editingEventId) {
-                      if (!eventImageFile && existingEventImageUrl) {
-                        payload.imageUrl = existingEventImageUrl;
-                      }
-                      await updateEvent({
-                        communityId,
-                        eventId: editingEventId,
-                        payload,
-                      }).unwrap();
-                      toast.success("Event updated");
-                    } else {
-                      await createEvent({
-                        communityId,
-                        payload,
-                      }).unwrap();
-                      toast.success("Event created");
-                    }
-                    setEditingEventId(null);
-                    setExistingEventImageUrl("");
-                    setEventTitle("");
-                    setEventDescription("");
-                    setEventVenue("");
-                    setEventDate("");
-                    setEventEndDate("");
-                    setEventWhoFor("");
-                    setEventWhatToBring("");
-                    setEventVolunteerRequirements("");
-                    setEventCapacity("");
-                    setEventImageFile(null);
-                    setEventLocation(null);
-                    setEventLocationDialogOpen(false);
-                    setAgendaFirstOffsetMinutes(0);
-                    setAgendaItems([newAgendaRow()]);
-                    setShowCreateEventErrors(false);
-                    appliedEditEventParamRef.current = null;
-                    setTab(3);
-                  } catch (err) {
-                    toast.error(
-                      getApiErrorMessage(
-                        err,
-                        editingEventId
-                          ? "Failed to update event"
-                          : "Failed to create event",
-                      ),
-                    );
-                  }
+  const formData = new FormData();
+
+  formData.append("title", eventTitle.trim());
+  formData.append("description", eventDescription || "");
+  formData.append("whoFor", eventWhoFor || "");
+  formData.append("whatToBring", eventWhatToBring || "");
+  formData.append("volunteerRequirements", eventVolunteerRequirements || "");
+  formData.append("venue", eventVenue.trim());
+  formData.append("date", new Date(eventDate).toISOString());
+  formData.append("capacity", String(Number(eventCapacity || 0)));
+
+  if (
+    eventEndDate.trim() &&
+    !Number.isNaN(new Date(eventEndDate).getTime())
+  ) {
+    formData.append("endDate", new Date(eventEndDate).toISOString());
+  }
+
+  if (eventLocation?.lat !== undefined && eventLocation?.lng !== undefined) {
+    formData.append("latitude", String(eventLocation.lat));
+    formData.append("longitude", String(eventLocation.lng));
+  }
+
+  formData.append(
+    "agenda",
+    JSON.stringify({
+      startOffsetMinutes: agendaFirstOffsetMinutes,
+      items: agendaItems.map((it) => ({
+        title: (it.title || "").trim(),
+        durationMinutes: Math.min(
+          24 * 60,
+          Math.max(1, Number(it.durationMinutes) || 30)
+        ),
+        gapBeforeMinutes: Math.max(0, Number(it.gapBeforeMinutes) || 0),
+      })),
+    })
+  );
+
+  if (eventImageFile) {
+    formData.append("image", eventImageFile);
+  }
+
+  if (editingEventId) {
+    if (!eventImageFile && existingEventImageUrl) {
+      formData.append("imageUrl", existingEventImageUrl);
+    }
+
+    await updateEvent({
+      communityId,
+      eventId: editingEventId,
+      payload: formData,
+    }).unwrap();
+
+    toast.success("Event updated");
+  } else {
+    await createEvent({
+      communityId,
+      payload: formData,
+    }).unwrap();
+
+    toast.success("Event created");
+  }
+
+  setEditingEventId(null);
+  setExistingEventImageUrl("");
+  setEventTitle("");
+  setEventDescription("");
+  setEventVenue("");
+  setEventDate("");
+  setEventEndDate("");
+  setEventWhoFor("");
+  setEventWhatToBring("");
+  setEventVolunteerRequirements("");
+  setEventCapacity("");
+  setEventImageFile(null);
+  setEventLocation(null);
+  setEventLocationDialogOpen(false);
+  setAgendaFirstOffsetMinutes(0);
+  setAgendaItems([newAgendaRow()]);
+  setShowCreateEventErrors(false);
+  appliedEditEventParamRef.current = null;
+  setTab(3);
+} catch (err) {
+  console.error("Event save error:", err);
+  toast.error(
+    getApiErrorMessage(
+      err,
+      editingEventId ? "Failed to update event" : "Failed to create event"
+    )
+  );
+}
                 }}
                 disabled={!isApprovedMember}
               >

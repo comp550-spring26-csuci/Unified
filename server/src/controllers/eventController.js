@@ -228,7 +228,7 @@ async function createEvent(req, res) {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
 
-  const imageUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.imageUrl || '');
+  const imageUrl = req.file ? `/uploads/events/${req.file.filename}` : (req.body.imageUrl || '');
 
   const agenda =
     parsed.data.agenda && parsed.data.agenda.items?.length
@@ -317,7 +317,7 @@ async function updateEvent(req, res) {
 
   let imageUrl = event.imageUrl || '';
   if (req.file) {
-    imageUrl = `/uploads/${req.file.filename}`;
+    imageUrl = `/uploads/events/${req.file.filename}`;
   } else if (req.body.imageUrl !== undefined && req.body.imageUrl !== '') {
     imageUrl = String(req.body.imageUrl);
   }

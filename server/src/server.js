@@ -14,6 +14,7 @@ const membershipRoutes = require('./routes/membershipRoutes');
 const postRoutes = require('./routes/postRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const meRoutes = require('./routes/meRoutes');
+const commentRoutes = require('./routes/commentRoutes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/memberships', membershipRoutes);
 
 // nested routes
 app.use('/api/communities/:communityId/posts', postRoutes);
+app.use('/api/communities/:communityId/posts/:postId/comments', commentRoutes);
 app.use('/api/communities/:communityId/events', eventRoutes);
 
 // error handler

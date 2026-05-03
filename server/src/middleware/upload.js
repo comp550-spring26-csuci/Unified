@@ -1,31 +1,18 @@
-const multer = require("multer");
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
 
-const uploadDir = path.join(__dirname, "../../uploads/posts");
+const postsDir = path.join(__dirname, "..", "..", "uploads", "posts");
+const avatarsDir = path.join(__dirname, "..", "..", "uploads", "avatars");
+const eventsDir = path.join(__dirname, "..", "..", "uploads", "events");
 
-// Create folder if it doesn't exist
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+fs.mkdirSync(postsDir, { recursive: true });
+fs.mkdirSync(avatarsDir, { recursive: true });
+fs.mkdirSync(eventsDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const baseName = path
-      .basename(file.originalname, ext)
-      .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9-_]/g, "");
-    const uniqueName = `${Date.now()}-${baseName}${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
-const fileFilter = (req, file, cb) => {
+const fileFilter = (_req, file, cb) => {
   const allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -33,12 +20,38 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+function makeStorage(uploadDir) {
+  return multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadDir);
+    },
+    filename: (_req, file, cb) => {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      cb(null, `${Date.now()}_${safe}`);
+    },
+  });
+}
+
 const uploadPostImage = multer({
-  storage,
+  storage: makeStorage(postsDir),
   fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-module.exports = uploadPostImage;
+const uploadAvatar = multer({
+  storage: makeStorage(avatarsDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+const uploadEventImage = multer({
+  storage: makeStorage(eventsDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+module.exports = {
+  uploadPostImage,
+  uploadAvatar,
+  uploadEventImage,
+};
