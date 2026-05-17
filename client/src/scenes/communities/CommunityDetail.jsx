@@ -20,11 +20,16 @@ import {
   Tabs,
   TextField,
   Typography,
+  Tooltip,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { GoogleMapPicker } from "@components/GoogleMapField";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link as RouterLink,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   Add,
   DragIndicator,
@@ -146,7 +151,14 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
         </Stack>
       ) : null}
 
-      <Stack direction="row" spacing={1} mt={1} mb={1} flexWrap="wrap" useFlexGap>
+      <Stack
+        direction="row"
+        spacing={1}
+        mt={1}
+        mb={1}
+        flexWrap="wrap"
+        useFlexGap
+      >
         {post.event?._id && onOpenEventDetail ? (
           <Button
             size="small"
@@ -181,7 +193,10 @@ function PostCard({ post, communityId, onLike, onOpenEventDetail }) {
 
       {post.event?._id ? (
         <Box mt={1}>
-          <EventRsvpVolunteerActions ev={post.event} communityId={communityId} />
+          <EventRsvpVolunteerActions
+            ev={post.event}
+            communityId={communityId}
+          />
         </Box>
       ) : null}
 
@@ -296,6 +311,7 @@ export default function CommunityDetail() {
   const [businessCategoriesNeededText, setBusinessCategoriesNeededText] =
     useState("");
   const [businessRequirements, setBusinessRequirements] = useState("");
+  const [startingBidAmount, setStartingBidAmount] = useState("");
   const [biddingDeadline, setBiddingDeadline] = useState("");
   const [eventCapacity, setEventCapacity] = useState("");
   const [showCreateEventErrors, setShowCreateEventErrors] = useState(false);
@@ -307,13 +323,15 @@ export default function CommunityDetail() {
   const [editingEventId, setEditingEventId] = useState(null);
   const [existingEventImageUrl, setExistingEventImageUrl] = useState("");
   const appliedEditEventParamRef = useRef(null);
+  const appliedViewEventParamRef = useRef(null);
   const [rulesDraft, setRulesDraft] = useState("");
 
   const [eventListSearch, setEventListSearch] = useState("");
   const [eventListDateFrom, setEventListDateFrom] = useState("");
   const [eventListDateTo, setEventListDateTo] = useState("");
   const [eventListFilterRsvp, setEventListFilterRsvp] = useState(false);
-  const [eventListFilterVolunteer, setEventListFilterVolunteer] = useState(false);
+  const [eventListFilterVolunteer, setEventListFilterVolunteer] =
+    useState(false);
   const [eventListFilterOwned, setEventListFilterOwned] = useState(false);
 
   const postsError = postsQ.error?.data?.message;
@@ -409,8 +427,7 @@ export default function CommunityDetail() {
     const titleOk = eventTitle.trim().length >= 2;
     const venueOk = eventVenue.trim().length >= 2;
     const dateOk =
-      Boolean(eventDate.trim()) &&
-      !Number.isNaN(new Date(eventDate).getTime());
+      Boolean(eventDate.trim()) && !Number.isNaN(new Date(eventDate).getTime());
     return titleOk && venueOk && dateOk;
   }, [eventTitle, eventVenue, eventDate]);
 
@@ -435,6 +452,10 @@ export default function CommunityDetail() {
   const createEventBusinessOk = useMemo(() => {
     if (!businessParticipationRequired) return true;
     if (!businessCategoriesNeeded.length) return false;
+    if (!startingBidAmount.trim()) return false;
+    const startingBidValue = Number(startingBidAmount);
+    if (!Number.isFinite(startingBidValue) || startingBidValue < 0)
+      return false;
     if (!biddingDeadline.trim()) return false;
     const biddingDeadlineMs = new Date(biddingDeadline).getTime();
     if (Number.isNaN(biddingDeadlineMs)) return false;
@@ -446,6 +467,7 @@ export default function CommunityDetail() {
     businessCategoriesNeeded,
     businessParticipationRequired,
     eventDate,
+    startingBidAmount,
   ]);
 
   useEffect(() => {
@@ -582,7 +604,9 @@ export default function CommunityDetail() {
     if (!eventsQ.isSuccess || !communityId || !userId) return;
     if (appliedEditEventParamRef.current === editEventParam) return;
 
-    const ev = (eventsQ.data?.events || []).find((e) => e._id === editEventParam);
+    const ev = (eventsQ.data?.events || []).find(
+      (e) => e._id === editEventParam,
+    );
     if (!ev) {
       toast.error("That event was not found.");
       const next = new URLSearchParams(searchParams);
@@ -622,6 +646,9 @@ export default function CommunityDetail() {
         : "",
     );
     setBusinessRequirements(ev.businessRequirements || "");
+    setStartingBidAmount(
+      Number.isFinite(ev.startingBidAmount) ? String(ev.startingBidAmount) : "",
+    );
     setBiddingDeadline(
       ev.biddingDeadline ? toDateTimeLocalFromDate(ev.biddingDeadline) : "",
     );
@@ -659,6 +686,35 @@ export default function CommunityDetail() {
     userId,
   ]);
 
+  useEffect(() => {
+    const viewEventParam = searchParams.get("viewEvent");
+    if (!viewEventParam) {
+      appliedViewEventParamRef.current = null;
+      return;
+    }
+    if (!eventsQ.isSuccess) return;
+    if (appliedViewEventParamRef.current === viewEventParam) return;
+
+    const ev = (eventsQ.data?.events || []).find(
+      (event) => event._id === viewEventParam,
+    );
+    if (!ev) {
+      toast.error("That event was not found.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("viewEvent");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+
+    appliedViewEventParamRef.current = viewEventParam;
+    setTab(3);
+    setPostEventDetail(ev);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("viewEvent");
+    setSearchParams(next, { replace: true });
+  }, [eventsQ.isSuccess, eventsQ.data?.events, searchParams, setSearchParams]);
+
   const agendaSlots = useMemo(
     () => computeAgendaSlots(eventDate, agendaFirstOffsetMinutes, agendaItems),
     [eventDate, agendaFirstOffsetMinutes, agendaItems],
@@ -673,7 +729,9 @@ export default function CommunityDetail() {
     if (!picked) return;
 
     if (index === 0) {
-      const delta = Math.round((picked.getTime() - eventStart.getTime()) / 60000);
+      const delta = Math.round(
+        (picked.getTime() - eventStart.getTime()) / 60000,
+      );
       setAgendaFirstOffsetMinutes(delta);
       return;
     }
@@ -921,58 +979,62 @@ export default function CommunityDetail() {
                 spacing={1.5}
                 alignItems={{ md: "stretch" }}
               >
-              <TextField
-                fullWidth
-                label="Write a post"
-                value={postText}
-                onChange={(e) => setPostText(e.target.value)}
-                multiline
-                minRows={3}
-                helperText="Add text, an image, or both."
-                sx={{ flex: 1 }}
-              />
-              <Stack
-                spacing={1}
-                justifyContent="flex-end"
-                sx={{ width: { xs: "100%", md: 180 }, flexShrink: 0 }}
-              >
-                <Button
-                  variant="outlined"
-                  component="label"
+                <TextField
                   fullWidth
-                  sx={{ minHeight: 44 }}
+                  label="Write a post"
+                  value={postText}
+                  onChange={(e) => setPostText(e.target.value)}
+                  multiline
+                  minRows={3}
+                  helperText="Add text, an image, or both."
+                  sx={{ flex: 1 }}
+                />
+                <Stack
+                  spacing={1}
+                  justifyContent="flex-end"
+                  sx={{ width: { xs: "100%", md: 180 }, flexShrink: 0 }}
                 >
-                  {postImageFile ? "Change Image" : "Add Image"}
-                  <input
-                    hidden
-                    accept="image/*"
-                    type="file"
-                    onChange={(e) => setPostImageFile(e.target.files?.[0] || null)}
-                  />
-                </Button>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  sx={{ minHeight: 44 }}
-                  onClick={async () => {
-                    try {
-                      await createPost({
-                        communityId,
-                        text: postText,
-                        imageFile: postImageFile,
-                      }).unwrap();
-                      setPostText("");
-                      setPostImageFile(null);
-                      toast.success("Post created");
-                    } catch (err) {
-                      toast.error(getApiErrorMessage(err, "Failed to create post"));
-                    }
-                  }}
-                  disabled={!postText.trim() && !postImageFile}
-                >
-                  Post
-                </Button>
-              </Stack>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    fullWidth
+                    sx={{ minHeight: 44 }}
+                  >
+                    {postImageFile ? "Change Image" : "Add Image"}
+                    <input
+                      hidden
+                      accept="image/*"
+                      type="file"
+                      onChange={(e) =>
+                        setPostImageFile(e.target.files?.[0] || null)
+                      }
+                    />
+                  </Button>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    sx={{ minHeight: 44 }}
+                    onClick={async () => {
+                      try {
+                        await createPost({
+                          communityId,
+                          text: postText,
+                          imageFile: postImageFile,
+                        }).unwrap();
+                        setPostText("");
+                        setPostImageFile(null);
+                        toast.success("Post created");
+                      } catch (err) {
+                        toast.error(
+                          getApiErrorMessage(err, "Failed to create post"),
+                        );
+                      }
+                    }}
+                    disabled={!postText.trim() && !postImageFile}
+                  >
+                    Post
+                  </Button>
+                </Stack>
               </Stack>
             </Stack>
           </Box>
@@ -1135,10 +1197,19 @@ export default function CommunityDetail() {
               sx={{
                 px: 2,
                 minHeight: 48,
-                "& .MuiAccordionSummary-content": { my: 1, alignItems: "center" },
+                "& .MuiAccordionSummary-content": {
+                  my: 1,
+                  alignItems: "center",
+                },
               }}
             >
-              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+              <Stack
+                direction="row"
+                alignItems="center"
+                spacing={1}
+                flexWrap="wrap"
+                useFlexGap
+              >
                 <Search fontSize="small" color="action" />
                 <Typography variant="subtitle2" fontWeight={700}>
                   Search &amp; filters
@@ -1194,9 +1265,13 @@ export default function CommunityDetail() {
                     helperText="Events on or before this start"
                   />
                 </Stack>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Show events where you match{" "}
-                  <strong>any</strong> checked option (with search and dates).
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
+                  Show events where you match <strong>any</strong> checked
+                  option (with search and dates).
                 </Typography>
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
@@ -1209,7 +1284,9 @@ export default function CommunityDetail() {
                       <Checkbox
                         size="small"
                         checked={eventListFilterRsvp}
-                        onChange={(e) => setEventListFilterRsvp(e.target.checked)}
+                        onChange={(e) =>
+                          setEventListFilterRsvp(e.target.checked)
+                        }
                         disabled={!userId}
                       />
                     }
@@ -1329,9 +1406,7 @@ export default function CommunityDetail() {
                 value={eventVenue}
                 onChange={(e) => setEventVenue(e.target.value)}
                 placeholder="Main Community Hall"
-                error={
-                  showCreateEventErrors && eventVenue.trim().length < 2
-                }
+                error={showCreateEventErrors && eventVenue.trim().length < 2}
                 helperText={
                   showCreateEventErrors && eventVenue.trim().length < 2
                     ? "Venue is required (at least 2 characters)."
@@ -1416,7 +1491,7 @@ export default function CommunityDetail() {
                 helperText={
                   showCreateEventErrors && !createEventEndOk
                     ? eventEndDate.trim() &&
-                        Number.isNaN(new Date(eventEndDate).getTime())
+                      Number.isNaN(new Date(eventEndDate).getTime())
                       ? "Enter a valid end date and time."
                       : "End must be on or after the start."
                     : "Optional — when the event is expected to finish."
@@ -1453,10 +1528,16 @@ export default function CommunityDetail() {
               <Typography variant="subtitle1" fontWeight={700} mb={1}>
                 Agenda
               </Typography>
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Start and end times follow this event’s <strong>Date &amp; time</strong>{" "}
-                (under Venue). End is computed from start + duration. Drag rows to
-                reorder; times reflow from the event start.
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                display="block"
+                mb={1}
+              >
+                Start and end times follow this event’s{" "}
+                <strong>Date &amp; time</strong> (under Venue). End is computed
+                from start + duration. Drag rows to reorder; times reflow from
+                the event start.
               </Typography>
               {!eventDate.trim() ? (
                 <Alert severity="info" sx={{ mb: 1.5 }}>
@@ -1496,7 +1577,7 @@ export default function CommunityDetail() {
                       }}
                       sx={{
                         flexWrap: "wrap",
-                        py: 0.5,
+                        py: 1,
                         borderRadius: 1,
                         "&:hover": { bgcolor: "action.hover" },
                       }}
@@ -1543,27 +1624,34 @@ export default function CommunityDetail() {
                         placeholder="Session or task"
                         sx={{ flex: { md: "1 1 140px" }, minWidth: 120 }}
                       />
-                      <TextField
-                        size="small"
-                        type="time"
-                        label="Start"
-                        value={startInputValue}
-                        onChange={(e) =>
-                          updateAgendaStartFromPicker(index, e.target.value)
-                        }
-                        disabled={!eventDate.trim()}
-                        InputLabelProps={{ shrink: true }}
-                        inputProps={
-                          index === 0 ? { step: 1 } : { step: 60 }
-                        }
-                        helperText={
-                          !eventDate.trim() && index === 0
-                            ? "Set Date & time under Venue"
+                      <Tooltip
+                        title={
+                          !eventDate.trim()
+                            ? "Set Date & time under Venue first"
                             : ""
                         }
-                        FormHelperTextProps={{ sx: { mx: 0 } }}
-                        sx={{ width: { xs: "100%", md: 130 } }}
-                      />
+                        arrow
+                        placement="top"
+                      >
+                        <span>
+                          <TextField
+                            size="small"
+                            type="time"
+                            label="Start"
+                            value={startInputValue}
+                            onChange={(e) =>
+                              updateAgendaStartFromPicker(index, e.target.value)
+                            }
+                            disabled={!eventDate.trim()}
+                            InputLabelProps={{ shrink: true }}
+                            inputProps={
+                              index === 0 ? { step: 1 } : { step: 60 }
+                            }
+                            sx={{ width: { xs: "100%", md: 130 } }}
+                          />
+                        </span>
+                      </Tooltip>
+
                       <TextField
                         size="small"
                         type="number"
@@ -1572,10 +1660,7 @@ export default function CommunityDetail() {
                         onChange={(e) => {
                           const n = Math.max(
                             1,
-                            Math.min(
-                              24 * 60,
-                              Number(e.target.value) || 1,
-                            ),
+                            Math.min(24 * 60, Number(e.target.value) || 1),
                           );
                           setAgendaItems((prev) =>
                             prev.map((it, j) =>
@@ -1598,7 +1683,12 @@ export default function CommunityDetail() {
                   );
                 })}
               </Stack>
-              <Stack direction="row" justifyContent="flex-end" alignItems="center" mt={1}>
+              <Stack
+                direction="row"
+                justifyContent="flex-end"
+                alignItems="center"
+                mt={1}
+              >
                 <IconButton
                   color="primary"
                   aria-label="Add agenda row"
@@ -1622,7 +1712,12 @@ export default function CommunityDetail() {
               <Typography variant="subtitle1" fontWeight={700} mb={1}>
                 Attendees &amp; volunteers
               </Typography>
-              <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                display="block"
+                mb={1.5}
+              >
                 Optional. These appear on the event details view.
               </Typography>
               <TextField
@@ -1705,6 +1800,16 @@ export default function CommunityDetail() {
                   />
                   <TextField
                     fullWidth
+                    type="number"
+                    label="Maximum bid amount"
+                    value={startingBidAmount}
+                    onChange={(e) => setStartingBidAmount(e.target.value)}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    error={showCreateEventErrors && !createEventBusinessOk}
+                    helperText="Businesses cannot bid above this amount."
+                  />
+                  <TextField
+                    fullWidth
                     type="datetime-local"
                     label="Bidding deadline"
                     value={biddingDeadline}
@@ -1716,10 +1821,16 @@ export default function CommunityDetail() {
                       showCreateEventErrors && !createEventBusinessOk
                         ? !businessCategoriesNeeded.length
                           ? "Enter at least one business category."
-                          : !biddingDeadline.trim() ||
-                              Number.isNaN(new Date(biddingDeadline).getTime())
-                            ? "Enter a valid bidding deadline."
-                            : "Bidding deadline must be in the future and on or before the event start."
+                          : !startingBidAmount.trim() ||
+                              !Number.isFinite(Number(startingBidAmount)) ||
+                              Number(startingBidAmount) < 0
+                            ? "Enter a valid maximum bid amount of 0 or more."
+                            : !biddingDeadline.trim() ||
+                                Number.isNaN(
+                                  new Date(biddingDeadline).getTime(),
+                                )
+                              ? "Enter a valid bidding deadline."
+                              : "Bidding deadline must be in the future and on or before the event start."
                         : "Businesses can bid until this date and time."
                     }
                   />
@@ -1838,6 +1949,7 @@ export default function CommunityDetail() {
                   setBusinessParticipationRequired(false);
                   setBusinessCategoriesNeededText("");
                   setBusinessRequirements("");
+                  setStartingBidAmount("");
                   setBiddingDeadline("");
                   setEventCapacity("");
                   setEventImageFile(null);
@@ -1899,6 +2011,11 @@ export default function CommunityDetail() {
                     businessParticipationRequired,
                     businessCategoriesNeeded,
                     businessRequirements,
+                    startingBidAmount:
+                      businessParticipationRequired &&
+                      Number.isFinite(Number(startingBidAmount))
+                        ? Number(startingBidAmount)
+                        : undefined,
                     biddingDeadline:
                       businessParticipationRequired &&
                       biddingDeadline.trim() &&
@@ -1951,6 +2068,7 @@ export default function CommunityDetail() {
                     setBusinessParticipationRequired(false);
                     setBusinessCategoriesNeededText("");
                     setBusinessRequirements("");
+                    setStartingBidAmount("");
                     setBiddingDeadline("");
                     setEventCapacity("");
                     setEventImageFile(null);

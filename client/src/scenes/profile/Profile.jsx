@@ -19,6 +19,7 @@ import { setAuth, setUser } from "@state";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { toAbsoluteMediaUrl } from "../../utils/media";
+import { formatUserRole, formatUserStatus } from "../../utils/roles";
 import {
   COMMUNITY_TAG_OPTIONS,
   getCommunityTagLabel,
@@ -295,7 +296,7 @@ export default function Profile() {
               alignItems={{ sm: "center" }}
             >
               <Typography variant="body2" color="text.secondary">
-                Role: {me?.role || "-"} | Status: {me?.status || "-"}
+                Role: {formatUserRole(me?.role) || "-"} | Status: {formatUserStatus(me?.status) || "-"}
               </Typography>
               <Button
                 variant="contained"

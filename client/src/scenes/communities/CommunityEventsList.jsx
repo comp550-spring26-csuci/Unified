@@ -46,7 +46,8 @@ export default function CommunityEventsList({
   const [eventDetailsDialogId, setEventDetailsDialogId] = useState(null);
   const [ownerDetailEvent, setOwnerDetailEvent] = useState(null);
   const [deleteEvent] = useDeleteEventMutation();
-  const [fetchEventOwnerDetail, ownerDetailQ] = useLazyGetEventOwnerDetailQuery();
+  const [fetchEventOwnerDetail, ownerDetailQ] =
+    useLazyGetEventOwnerDetailQuery();
   const navigate = useNavigate();
 
   const findEvent = (id) => events.find((e) => e._id === id);
@@ -120,13 +121,41 @@ export default function CommunityEventsList({
                       </Typography>
                     ) : null}
                   </Box>
-                  {ev.isDeleted ? (
-                    <Chip size="small" color="error" variant="outlined" label="Deleted" />
-                  ) : (
-                    <Typography variant="caption" color="text.secondary">
-                      Event
-                    </Typography>
-                  )}
+                  <Stack
+                    direction="row"
+                    alignItems="flex-end"
+                    spacing={0.5}
+                    sx={{ ml: "auto", flexShrink: 0 }}
+                  >
+                    {ev.businessParticipationRequired ? (
+                      <Chip
+                        size="small"
+                        color={ev.acceptedBusinessBid ? "success" : "primary"}
+                        variant="outlined"
+                        label={
+                          ev.acceptedBusinessBid
+                            ? "Business selected"
+                            : ev.businessBidSubmissionOpen
+                              ? "Business bidding open"
+                              : ev.biddingDeadlinePassed
+                                ? "Business bidding closed"
+                                : "Business participation required"
+                        }
+                      />
+                    ) : null}
+                    {ev.isDeleted ? (
+                      <Chip
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                        label="Deleted"
+                      />
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">
+                        Event
+                      </Typography>
+                    )}
+                  </Stack>
                 </Stack>
                 {ev.description ? (
                   <Typography mt={1}>{ev.description}</Typography>
@@ -149,7 +178,11 @@ export default function CommunityEventsList({
                       }}
                     >
                       <PersonOutlined
-                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                        sx={{
+                          fontSize: 17,
+                          color: "text.secondary",
+                          flexShrink: 0,
+                        }}
                       />
                       <Typography
                         variant="body2"
@@ -174,7 +207,12 @@ export default function CommunityEventsList({
                           {ev.createdBy?.name ?? "Unknown"}
                         </Button>
                       ) : (
-                        <Typography variant="body2" fontWeight={600} noWrap sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          noWrap
+                          sx={{ minWidth: 0 }}
+                        >
                           {ev.createdBy?.name ?? "Unknown"}
                         </Typography>
                       )}
@@ -189,7 +227,11 @@ export default function CommunityEventsList({
                       }}
                     >
                       <AccessTimeOutlined
-                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                        sx={{
+                          fontSize: 17,
+                          color: "text.secondary",
+                          flexShrink: 0,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Date &amp; time:
@@ -209,7 +251,11 @@ export default function CommunityEventsList({
                         }}
                       >
                         <AccessTimeOutlined
-                          sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                          sx={{
+                            fontSize: 17,
+                            color: "text.secondary",
+                            flexShrink: 0,
+                          }}
                         />
                         <Typography variant="body2" color="text.secondary">
                           Ends:
@@ -238,9 +284,17 @@ export default function CommunityEventsList({
                       }}
                     >
                       <LocationOnOutlined
-                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                        sx={{
+                          fontSize: 17,
+                          color: "text.secondary",
+                          flexShrink: 0,
+                        }}
                       />
-                      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ flexShrink: 0 }}
+                      >
                         Venue:
                       </Typography>
                       <Typography
@@ -251,9 +305,19 @@ export default function CommunityEventsList({
                         {ev.venue || "TBA"}
                       </Typography>
                     </Box>
-                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                      }}
+                    >
                       <GroupsOutlined
-                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                        sx={{
+                          fontSize: 17,
+                          color: "text.secondary",
+                          flexShrink: 0,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Attendees:
@@ -262,9 +326,19 @@ export default function CommunityEventsList({
                         {`${ev.attendees?.length || 0}${ev.capacity > 0 ? ` / ${ev.capacity}` : ""}`}
                       </Typography>
                     </Box>
-                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                      }}
+                    >
                       <VolunteerActivismOutlined
-                        sx={{ fontSize: 17, color: "text.secondary", flexShrink: 0 }}
+                        sx={{
+                          fontSize: 17,
+                          color: "text.secondary",
+                          flexShrink: 0,
+                        }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         Volunteers:
@@ -282,22 +356,6 @@ export default function CommunityEventsList({
                   </Stack>
                 </Stack>
                 <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
-                  {ev.businessParticipationRequired ? (
-                    <Chip
-                      size="small"
-                      color={ev.acceptedBusinessBid ? "success" : "primary"}
-                      variant="outlined"
-                      label={
-                        ev.acceptedBusinessBid
-                          ? "Business selected"
-                          : ev.businessBidSubmissionOpen
-                            ? "Business bidding open"
-                            : ev.biddingDeadlinePassed
-                              ? "Business bidding closed"
-                              : "Business participation required"
-                      }
-                    />
-                  ) : null}
                   <Button
                     size="small"
                     variant="outlined"
@@ -376,7 +434,9 @@ export default function CommunityEventsList({
         onClose={() => setEventDetailsDialogId(null)}
         evDetail={findEvent(eventDetailsDialogId)}
         communityId={
-          eventDetailsDialogId ? resolveCommunityId(findEvent(eventDetailsDialogId) || {}) : ""
+          eventDetailsDialogId
+            ? resolveCommunityId(findEvent(eventDetailsDialogId) || {})
+            : ""
         }
       />
 
@@ -389,23 +449,29 @@ export default function CommunityEventsList({
         <DialogTitle>Event Owner Details</DialogTitle>
         <DialogContent>
           {ownerDetailQ.isFetching ? (
-            <Typography color="text.secondary">Loading owner details...</Typography>
+            <Typography color="text.secondary">
+              Loading owner details...
+            </Typography>
           ) : ownerDetailQ.error ? (
             <Alert severity="warning">
-              {ownerDetailQ.error?.data?.message || "Failed to load owner details"}
+              {ownerDetailQ.error?.data?.message ||
+                "Failed to load owner details"}
             </Alert>
           ) : ownerDetailQ.data?.owner ? (
             <Stack spacing={1.2}>
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <Avatar
                   src={
-                    toAbsoluteMediaUrl(ownerDetailQ.data.owner.avatarUrl || "") ||
-                    undefined
+                    toAbsoluteMediaUrl(
+                      ownerDetailQ.data.owner.avatarUrl || "",
+                    ) || undefined
                   }
                   alt={ownerDetailQ.data.owner.name || "Owner"}
                   sx={{ width: 44, height: 44 }}
                 >
-                  {(ownerDetailQ.data.owner.name || "O").charAt(0).toUpperCase()}
+                  {(ownerDetailQ.data.owner.name || "O")
+                    .charAt(0)
+                    .toUpperCase()}
                 </Avatar>
                 <Box>
                   <Typography fontWeight={700}>
@@ -434,7 +500,9 @@ export default function CommunityEventsList({
               </Typography>
             </Stack>
           ) : (
-            <Typography color="text.secondary">No owner details found.</Typography>
+            <Typography color="text.secondary">
+              No owner details found.
+            </Typography>
           )}
         </DialogContent>
       </Dialog>

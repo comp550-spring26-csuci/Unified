@@ -22,6 +22,7 @@ import VolunteerOpportunities from "@scenes/communities/VolunteerOpportunities";
 import Profile from "@scenes/profile/Profile";
 import CommunityApprovals from "@scenes/admin/CommunityApprovals";
 import MembershipApprovals from "@scenes/admin/MembershipApprovals";
+import Messages from "@scenes/messages";
 
 import "./App.css";
 
@@ -76,6 +77,14 @@ function App() {
               <Route
                 path="/membership-requests"
                 element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <MembershipRequests />}
+              />
+              <Route
+                path="/messages"
+                element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <Messages />}
+              />
+              <Route
+                path="/messages/:conversationId"
+                element={isSuperAdmin ? <Navigate to="/dashboard" replace /> : <Messages />}
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin/community-approvals" element={<CommunityApprovals />} />

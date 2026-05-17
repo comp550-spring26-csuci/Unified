@@ -24,12 +24,14 @@ import {
   HowToRegOutlined,
   PendingActionsOutlined,
   PersonOutlineOutlined,
+  ChatBubbleOutline,
 } from "@mui/icons-material";
 import { useMyCommunitiesQuery } from "@state/api";
 
 import FlexBetween from "./FlexBetween";
 import UnifiedBrand from "./UnifiedBrand";
 import { toAbsoluteMediaUrl } from "../utils/media";
+import { formatUserRole } from "../utils/roles";
 
 const Sidebar = ({
   user,
@@ -87,6 +89,11 @@ const Sidebar = ({
           text: "Events",
           path: "/my-events",
           icon: <EventAvailableOutlined />,
+        },
+        {
+          text: "Messages",
+          path: "/messages",
+          icon: <ChatBubbleOutline />,
         },
       );
     }
@@ -262,7 +269,7 @@ const Sidebar = ({
                     fontSize="0.85rem"
                     sx={{ color: theme.palette.text.secondary }}
                   >
-                    {user?.role || ""}
+                    {formatUserRole(user?.role)}
                   </Typography>
                 </Box>
               </Box>
