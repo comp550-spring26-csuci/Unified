@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { toAbsoluteMediaUrl } from "../utils/media";
+import { formatUserRole } from "../utils/roles";
 
 const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
   const dispatch = useDispatch();
@@ -123,7 +124,7 @@ const Navbar = ({ user, isSidebarOpen, setIsSidebarOpen }) => {
                 {user?.name || ""}
               </Typography>
               <Typography fontSize="0.75rem" sx={{ color: "text.secondary" }}>
-                {user?.role || ""}
+                {formatUserRole(user?.role)}
               </Typography>
             </Box>
             <ArrowDropDownOutlined

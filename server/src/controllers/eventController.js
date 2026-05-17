@@ -4,6 +4,7 @@ const Membership = require('../models/Membership');
 const Event = require('../models/Event');
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
 
 const ROLE_BUSINESS_OWNER = 'business_owner';
 
@@ -42,6 +43,9 @@ function buildEventAnnouncementPostText(data, agendaItemCount = 0) {
     extras.push(`Volunteer needs: ${data.volunteerRequirements.trim()}`);
   }
   if (data.businessParticipationRequired) {
+    if (Number.isFinite(data.startingBidAmount)) {
+      extras.push(`Business maximum bid: ${formatAmountDisplay(data.startingBidAmount)}`);
+    }
     if (Array.isArray(data.businessCategoriesNeeded) && data.businessCategoriesNeeded.length) {
       extras.push(`Business types needed: ${data.businessCategoriesNeeded.join(', ')}`);
     }
@@ -116,6 +120,29 @@ function parseStringList(raw) {
   return [];
 }
 
+function parseAmountInput(raw) {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : raw;
+  if (typeof raw === 'string') {
+    const cleaned = raw.trim().replace(/[$,\s]/g, '');
+    if (!cleaned) return undefined;
+    const amount = Number(cleaned);
+    return Number.isFinite(amount) ? amount : raw;
+  }
+  return raw;
+}
+
+function formatAmountDisplay(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 function applyEventPopulate(query) {
   let populated = query;
   for (const item of EVENT_POPULATE) {
@@ -140,11 +167,47 @@ function isBusinessBidSubmissionOpen(event, now = Date.now()) {
   );
 }
 
-function serializeAcceptedBid(bid, { viewerId, isEventCreator }) {
+function resolveBidAmount(bid) {
+  const direct = bid?.bidAmount;
+  if (typeof direct === 'number' && Number.isFinite(direct)) return direct;
+  const legacy = parseAmountInput(bid?.pricing);
+  return typeof legacy === 'number' && Number.isFinite(legacy) ? legacy : null;
+}
+
+function compareBusinessBids(a, b) {
+  const amountA = resolveBidAmount(a);
+  const amountB = resolveBidAmount(b);
+  if (amountA !== amountB) {
+    if (amountA === null) return 1;
+    if (amountB === null) return -1;
+    return amountA - amountB;
+  }
+
+  const timeA = new Date(a?.createdAt).getTime();
+  const timeB = new Date(b?.createdAt).getTime();
+  const safeTimeA = Number.isNaN(timeA) ? Number.MAX_SAFE_INTEGER : timeA;
+  const safeTimeB = Number.isNaN(timeB) ? Number.MAX_SAFE_INTEGER : timeB;
+  if (safeTimeA !== safeTimeB) return safeTimeA - safeTimeB;
+
+  return normalizeId(a?._id).localeCompare(normalizeId(b?._id));
+}
+
+function buildRankedBusinessBids(allBids) {
+  return [...allBids].sort(compareBusinessBids).map((bid, index) => ({
+    bid,
+    rank: index + 1,
+    isLeadingBid: index === 0,
+  }));
+}
+
+function serializeAcceptedBid(bid, { viewerId, isEventCreator, rank, isLeadingBid }) {
   if (!bid) return null;
   const plain = {
     _id: bid._id,
     status: 'accepted',
+    bidAmount: resolveBidAmount(bid),
+    bidRank: rank ?? null,
+    isLeadingBid: Boolean(isLeadingBid),
     businessName: bid.businessName || '',
     businessLocation: bid.businessLocation || '',
     businessCategory: bid.businessCategory || '',
@@ -162,7 +225,6 @@ function serializeAcceptedBid(bid, { viewerId, isEventCreator }) {
 
   if (isEventCreator || bidOwnerId === normalizeId(viewerId)) {
     plain.proposal = bid.proposal || '';
-    plain.pricing = bid.pricing || '';
     plain.additionalNotes = bid.additionalNotes || '';
     if (bid.businessOwner?.email) {
       plain.businessOwner = {
@@ -175,15 +237,17 @@ function serializeAcceptedBid(bid, { viewerId, isEventCreator }) {
   return plain;
 }
 
-function serializeVisibleBid(bid, { viewerId, isEventCreator, acceptedBidId }) {
+function serializeVisibleBid(bid, { viewerId, isEventCreator, acceptedBidId, rank, isLeadingBid }) {
   const bidId = normalizeId(bid._id);
   const bidOwnerId = normalizeId(bid.businessOwner);
   const isAccepted = bidId === acceptedBidId;
   const visible = {
     _id: bid._id,
     status: isAccepted ? 'accepted' : bid.status || 'pending',
+    bidAmount: resolveBidAmount(bid),
+    bidRank: rank ?? null,
+    isLeadingBid: Boolean(isLeadingBid),
     proposal: bid.proposal || '',
-    pricing: bid.pricing || '',
     additionalNotes: bid.additionalNotes || '',
     createdAt: bid.createdAt,
     updatedAt: bid.updatedAt,
@@ -207,7 +271,6 @@ function serializeVisibleBid(bid, { viewerId, isEventCreator, acceptedBidId }) {
   }
 
   if (!isEventCreator && bidOwnerId !== normalizeId(viewerId)) {
-    delete visible.pricing;
     delete visible.additionalNotes;
     delete visible.proposal;
   }
@@ -215,7 +278,7 @@ function serializeVisibleBid(bid, { viewerId, isEventCreator, acceptedBidId }) {
   return visible;
 }
 
-function serializeEventForViewer(event, viewerId) {
+function serializeEventForViewer(event, viewerId, viewerRole = '') {
   const plain =
     typeof event?.toObject === 'function' ? event.toObject({ virtuals: true }) : JSON.parse(JSON.stringify(event));
   const viewerKey = normalizeId(viewerId);
@@ -223,36 +286,52 @@ function serializeEventForViewer(event, viewerId) {
   const isEventCreator = viewerKey && eventCreatorId === viewerKey;
   const allBids = Array.isArray(plain.businessBids) ? plain.businessBids : [];
   const acceptedBidId = normalizeId(plain.acceptedBusinessBidId);
-  const myBid = viewerKey
-    ? allBids.find((bid) => normalizeId(bid.businessOwner) === viewerKey) || null
+  const rankedBids = buildRankedBusinessBids(allBids);
+  const canViewBidHistory = Boolean(isEventCreator || viewerRole === ROLE_BUSINESS_OWNER);
+  const myBidEntry = viewerKey
+    ? rankedBids.find(({ bid }) => normalizeId(bid.businessOwner) === viewerKey) || null
     : null;
-  const acceptedBid =
-    acceptedBidId && allBids.length
-      ? allBids.find((bid) => normalizeId(bid._id) === acceptedBidId) || null
+  const acceptedBidEntry =
+    acceptedBidId && rankedBids.length
+      ? rankedBids.find(({ bid }) => normalizeId(bid._id) === acceptedBidId) || null
       : null;
+  const acceptedBidOwnerId = normalizeId(acceptedBidEntry?.bid?.businessOwner);
+  const userCanAccessAcceptedBusinessChat = Boolean(
+    plain.acceptedBusinessConversationId &&
+      viewerKey &&
+      (isEventCreator || acceptedBidOwnerId === viewerKey),
+  );
 
   plain.businessBidCount = allBids.length;
   plain.biddingDeadlinePassed = hasBidDeadlinePassed(plain);
   plain.biddingClosed = Boolean(acceptedBidId) || plain.biddingDeadlinePassed;
   plain.businessBidSubmissionOpen = isBusinessBidSubmissionOpen(plain);
   plain.userCanManageBusinessBids = isEventCreator;
-  plain.acceptedBusinessBid = serializeAcceptedBid(acceptedBid, { viewerId, isEventCreator });
-  plain.myBusinessBid = myBid
-    ? serializeVisibleBid(myBid, { viewerId, isEventCreator: false, acceptedBidId })
-    : null;
-
-  if (isEventCreator) {
-    plain.businessBids = allBids.map((bid) =>
-      serializeVisibleBid(bid, { viewerId, isEventCreator: true, acceptedBidId }),
-    );
-  } else if (myBid) {
-    plain.businessBids = [
-      serializeVisibleBid(myBid, {
+  plain.userCanViewBusinessBidHistory = canViewBidHistory;
+  plain.acceptedBusinessBid = serializeAcceptedBid(acceptedBidEntry?.bid, {
+    viewerId,
+    isEventCreator,
+    rank: acceptedBidEntry?.rank,
+    isLeadingBid: acceptedBidEntry?.isLeadingBid,
+  });
+  plain.myBusinessBid = myBidEntry
+    ? serializeVisibleBid(myBidEntry.bid, {
         viewerId,
         isEventCreator: false,
         acceptedBidId,
-      }),
-    ];
+        rank: myBidEntry.rank,
+        isLeadingBid: myBidEntry.isLeadingBid,
+      })
+    : null;
+  plain.acceptedBusinessConversationId = userCanAccessAcceptedBusinessChat
+    ? normalizeId(plain.acceptedBusinessConversationId)
+    : '';
+  plain.userCanChatWithAcceptedBusiness = userCanAccessAcceptedBusinessChat;
+
+  if (canViewBidHistory) {
+    plain.businessBids = rankedBids.map(({ bid, rank, isLeadingBid }) =>
+      serializeVisibleBid(bid, { viewerId, isEventCreator, acceptedBidId, rank, isLeadingBid }),
+    );
   } else {
     plain.businessBids = [];
   }
@@ -260,8 +339,8 @@ function serializeEventForViewer(event, viewerId) {
   return plain;
 }
 
-function serializeEventsForViewer(events, viewerId) {
-  return (events || []).map((event) => serializeEventForViewer(event, viewerId));
+function serializeEventsForViewer(events, viewerId, viewerRole = '') {
+  return (events || []).map((event) => serializeEventForViewer(event, viewerId, viewerRole));
 }
 
 async function requireApprovedMember(userId, communityId) {
@@ -342,6 +421,7 @@ const createSchema = z
     businessCategoriesNeeded: z
       .preprocess(parseStringList, z.array(z.string().min(1).max(80)).max(20).optional().default([])),
     businessRequirements: z.string().max(2000).optional().default(''),
+    startingBidAmount: z.preprocess(parseAmountInput, z.number().nonnegative().optional()),
     biddingDeadline: z.preprocess((raw) => {
       if (raw === undefined || raw === null || raw === '') return undefined;
       return raw;
@@ -379,6 +459,13 @@ const createSchema = z
           path: ['businessCategoriesNeeded'],
         });
       }
+      if (data.startingBidAmount === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'A maximum bid amount is required when business participation is enabled',
+          path: ['startingBidAmount'],
+        });
+      }
       if (!data.biddingDeadline) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -406,7 +493,7 @@ const createSchema = z
 
 const bidSchema = z.object({
   proposal: z.string().min(10).max(4000),
-  pricing: z.string().max(200).optional().default(''),
+  bidAmount: z.preprocess(parseAmountInput, z.number().nonnegative()),
   additionalNotes: z.string().max(2000).optional().default(''),
 });
 
@@ -435,9 +522,9 @@ async function listMyEvents(req, res) {
   ]);
 
   return res.json({
-    created: serializeEventsForViewer(created, userId),
-    attending: serializeEventsForViewer(attending, userId),
-    volunteering: serializeEventsForViewer(volunteering, userId),
+    created: serializeEventsForViewer(created, userId, req.auth.role),
+    attending: serializeEventsForViewer(attending, userId, req.auth.role),
+    volunteering: serializeEventsForViewer(volunteering, userId, req.auth.role),
   });
 }
 
@@ -489,7 +576,7 @@ async function listVolunteerOpportunities(req, res) {
 
   const events = await applyEventPopulate(Event.find(filter).sort({ date: 1 }).limit(300));
 
-  return res.json({ events: serializeEventsForViewer(events, userId) });
+  return res.json({ events: serializeEventsForViewer(events, userId, req.auth.role) });
 }
 
 async function listBusinessOpportunities(req, res) {
@@ -544,7 +631,7 @@ async function listBusinessOpportunities(req, res) {
   }
 
   const events = await applyEventPopulate(Event.find(filter).sort({ date: 1 }).limit(300));
-  return res.json({ events: serializeEventsForViewer(events, req.auth.sub) });
+  return res.json({ events: serializeEventsForViewer(events, req.auth.sub, req.auth.role) });
 }
 
 async function listCommunityEvents(req, res) {
@@ -555,7 +642,7 @@ async function listCommunityEvents(req, res) {
   const events = await applyEventPopulate(
     Event.find({ community: communityId, isDeleted: { $ne: true } }).sort({ date: 1 }).limit(200),
   );
-  return res.json({ events: serializeEventsForViewer(events, req.auth.sub) });
+  return res.json({ events: serializeEventsForViewer(events, req.auth.sub, req.auth.role) });
 }
 
 async function createEvent(req, res) {
@@ -585,12 +672,14 @@ async function createEvent(req, res) {
         businessParticipationRequired: true,
         businessCategoriesNeeded: parsed.data.businessCategoriesNeeded,
         businessRequirements: parsed.data.businessRequirements || '',
+        startingBidAmount: parsed.data.startingBidAmount,
         biddingDeadline: parsed.data.biddingDeadline,
       }
     : {
         businessParticipationRequired: false,
         businessCategoriesNeeded: [],
         businessRequirements: '',
+        startingBidAmount: undefined,
       };
 
   const event = await Event.create({
@@ -635,7 +724,7 @@ async function createEvent(req, res) {
   }
 
   const populated = await applyEventPopulate(Event.findById(event._id));
-  return res.status(201).json({ event: serializeEventForViewer(populated, req.auth.sub) });
+  return res.status(201).json({ event: serializeEventForViewer(populated, req.auth.sub, req.auth.role) });
 }
 
 function businessConfigHasChanged(existingEvent, parsedData) {
@@ -645,15 +734,25 @@ function businessConfigHasChanged(existingEvent, parsedData) {
   const nextCategories = parsedData.businessCategoriesNeeded || [];
   const existingRequirements = String(existingEvent.businessRequirements || '').trim();
   const nextRequirements = String(parsedData.businessRequirements || '').trim();
+  const existingStartingBidAmount = Number.isFinite(Number(existingEvent.startingBidAmount))
+    ? Number(existingEvent.startingBidAmount)
+    : null;
+  const nextStartingBidAmount = Number.isFinite(Number(parsedData.startingBidAmount))
+    ? Number(parsedData.startingBidAmount)
+    : null;
   const existingDeadline = existingEvent.biddingDeadline
     ? new Date(existingEvent.biddingDeadline).toISOString()
     : '';
   const nextDeadline = parsedData.biddingDeadline ? parsedData.biddingDeadline.toISOString() : '';
+  const startingBidAmountChanged =
+    existingStartingBidAmount !== nextStartingBidAmount &&
+    !(existingStartingBidAmount === null && nextStartingBidAmount !== null);
 
   return (
     existingRequired !== nextRequired ||
     existingCategories.join('|') !== nextCategories.join('|') ||
     existingRequirements !== nextRequirements ||
+    startingBidAmountChanged ||
     existingDeadline !== nextDeadline
   );
 }
@@ -744,11 +843,13 @@ async function updateEvent(req, res) {
     $set.businessParticipationRequired = true;
     $set.businessCategoriesNeeded = parsed.data.businessCategoriesNeeded;
     $set.businessRequirements = parsed.data.businessRequirements || '';
+    $set.startingBidAmount = parsed.data.startingBidAmount;
     $set.biddingDeadline = parsed.data.biddingDeadline;
   } else {
     $set.businessParticipationRequired = false;
     $set.businessCategoriesNeeded = [];
     $set.businessRequirements = '';
+    $unset.startingBidAmount = '';
     $unset.biddingDeadline = '';
   }
 
@@ -763,7 +864,7 @@ async function updateEvent(req, res) {
 
   if (!populated) return res.status(404).json({ message: 'Event not found' });
 
-  return res.json({ event: serializeEventForViewer(populated, req.auth.sub) });
+  return res.json({ event: serializeEventForViewer(populated, req.auth.sub, req.auth.role) });
 }
 
 async function deleteEvent(req, res) {
@@ -862,6 +963,14 @@ async function submitBusinessBid(req, res) {
 
   const parsed = bidSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input', errors: parsed.error.issues });
+  if (
+    Number.isFinite(event.startingBidAmount) &&
+    parsed.data.bidAmount > Number(event.startingBidAmount)
+  ) {
+    return res.status(400).json({
+      message: `Bid amount must be ${formatAmountDisplay(0)} or more and no greater than ${formatAmountDisplay(event.startingBidAmount)}`,
+    });
+  }
 
   const bidOwnerId = String(req.auth.sub);
   const existingBid = event.businessBids.find((bid) => normalizeId(bid.businessOwner) === bidOwnerId);
@@ -871,8 +980,9 @@ async function submitBusinessBid(req, res) {
     existingBid.businessName = businessProfile.businessName;
     existingBid.businessLocation = businessProfile.businessLocation;
     existingBid.businessCategory = businessProfile.businessCategory;
+    existingBid.bidAmount = parsed.data.bidAmount;
     existingBid.proposal = parsed.data.proposal;
-    existingBid.pricing = parsed.data.pricing || '';
+    existingBid.pricing = String(parsed.data.bidAmount);
     existingBid.additionalNotes = parsed.data.additionalNotes || '';
     existingBid.status = 'pending';
   } else {
@@ -881,8 +991,9 @@ async function submitBusinessBid(req, res) {
       businessName: businessProfile.businessName,
       businessLocation: businessProfile.businessLocation,
       businessCategory: businessProfile.businessCategory,
+      bidAmount: parsed.data.bidAmount,
       proposal: parsed.data.proposal,
-      pricing: parsed.data.pricing || '',
+      pricing: String(parsed.data.bidAmount),
       additionalNotes: parsed.data.additionalNotes || '',
       status: 'pending',
     });
@@ -890,7 +1001,7 @@ async function submitBusinessBid(req, res) {
 
   await event.save();
   const populated = await applyEventPopulate(Event.findById(event._id));
-  return res.json({ event: serializeEventForViewer(populated, req.auth.sub) });
+  return res.json({ event: serializeEventForViewer(populated, req.auth.sub, req.auth.role) });
 }
 
 async function acceptBusinessBid(req, res) {
@@ -915,16 +1026,37 @@ async function acceptBusinessBid(req, res) {
 
   const bid = event.businessBids.id(bidId);
   if (!bid) return res.status(404).json({ message: 'Bid not found' });
+  const leadingBid = buildRankedBusinessBids(event.businessBids)[0]?.bid;
+  if (!leadingBid || normalizeId(leadingBid._id) !== normalizeId(bidId)) {
+    return res.status(409).json({ message: 'Only the current lowest bid can be accepted' });
+  }
 
   event.acceptedBusinessBidId = bid._id;
   event.businessBiddingClosedAt = new Date();
   event.businessBids.forEach((entry) => {
     entry.status = normalizeId(entry._id) === normalizeId(bidId) ? 'accepted' : 'declined';
   });
+  const conversation = await Conversation.findOneAndUpdate(
+    { event: event._id },
+    {
+      $set: {
+        community: event.community,
+        event: event._id,
+        acceptedBid: bid._id,
+        participants: [event.createdBy, bid.businessOwner],
+        createdBy: req.auth.sub,
+      },
+      $setOnInsert: {
+        lastMessageText: '',
+      },
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  );
+  event.acceptedBusinessConversationId = conversation._id;
 
   await event.save();
   const populated = await applyEventPopulate(Event.findById(event._id));
-  return res.json({ event: serializeEventForViewer(populated, req.auth.sub) });
+  return res.json({ event: serializeEventForViewer(populated, req.auth.sub, req.auth.role) });
 }
 
 async function getEventOwnerDetails(req, res) {

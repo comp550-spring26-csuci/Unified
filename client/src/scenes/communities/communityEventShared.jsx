@@ -41,6 +41,17 @@ export function MetaRow({ icon, label, value }) {
   );
 }
 
+export function formatCurrencyAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "Not set";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 /** Parse `datetime-local` / `YYYY-MM-DD` strings as local wall time (not UTC). */
 export function parseDateTimeLocalInput(str) {
   if (!str || typeof str !== "string") return null;

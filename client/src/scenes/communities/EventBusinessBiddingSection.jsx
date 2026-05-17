@@ -11,13 +11,17 @@ import {
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   useAcceptBusinessBidMutation,
   useSubmitBusinessBidMutation,
 } from "@state/api";
 import { getApiErrorMessage } from "../../utils/apiError";
-import { normalizeId } from "./communityEventShared";
+import {
+  formatCurrencyAmount,
+  normalizeId,
+} from "./communityEventShared";
 
 function StatusChip({ event }) {
   if (event?.acceptedBusinessBid) {
@@ -32,14 +36,28 @@ function StatusChip({ event }) {
   return <Chip size="small" variant="outlined" label="Awaiting schedule" />;
 }
 
+function getRankLabel(rank) {
+  const numericRank = Number(rank);
+  if (!Number.isFinite(numericRank) || numericRank <= 0) return "Unranked";
+  const mod100 = numericRank % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${numericRank}th place`;
+  const mod10 = numericRank % 10;
+  if (mod10 === 1) return `${numericRank}st place`;
+  if (mod10 === 2) return `${numericRank}nd place`;
+  if (mod10 === 3) return `${numericRank}rd place`;
+  return `${numericRank}th place`;
+}
+
 export default function EventBusinessBiddingSection({ communityId, event }) {
   const user = useSelector((s) => s.global.user);
+  const navigate = useNavigate();
   const userId = normalizeId(user);
   const isBusinessOwner = user?.role === "business_owner";
   const canManage = Boolean(event?.userCanManageBusinessBids);
+  const canViewBidHistory = Boolean(event?.userCanViewBusinessBidHistory);
 
   const [proposal, setProposal] = useState("");
-  const [pricing, setPricing] = useState("");
+  const [bidAmount, setBidAmount] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
 
   const [submitBusinessBid, { isLoading: isSubmitting }] =
@@ -49,11 +67,24 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
 
   useEffect(() => {
     setProposal(event?.myBusinessBid?.proposal || "");
-    setPricing(event?.myBusinessBid?.pricing || "");
+    setBidAmount(
+      Number.isFinite(event?.myBusinessBid?.bidAmount)
+        ? String(event.myBusinessBid.bidAmount)
+        : "",
+    );
     setAdditionalNotes(event?.myBusinessBid?.additionalNotes || "");
   }, [event?.myBusinessBid]);
 
   const acceptedBidId = normalizeId(event?.acceptedBusinessBid?._id);
+  const maximumBidAmount = Number.isFinite(event?.startingBidAmount)
+    ? Number(event.startingBidAmount)
+    : null;
+  const parsedBidAmount = Number(bidAmount);
+  const hasValidBidAmount =
+    Number.isFinite(parsedBidAmount) &&
+    parsedBidAmount >= 0 &&
+    (maximumBidAmount == null || parsedBidAmount <= maximumBidAmount);
+
   const canSubmitBid =
     Boolean(communityId) &&
     isBusinessOwner &&
@@ -65,10 +96,20 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
     !acceptedBidId &&
     Array.isArray(event?.businessBids) &&
     event.businessBids.length > 0;
+  const acceptedConversationId = normalizeId(
+    event?.acceptedBusinessConversationId,
+  );
+  const canOpenAcceptedChat =
+    Boolean(acceptedConversationId) &&
+    Boolean(event?.userCanChatWithAcceptedBusiness);
 
   const requiredCategories = useMemo(
     () => event?.businessCategoriesNeeded || [],
     [event?.businessCategoriesNeeded],
+  );
+  const visibleBids = useMemo(
+    () => (Array.isArray(event?.businessBids) ? event.businessBids : []),
+    [event?.businessBids],
   );
 
   if (!event?.businessParticipationRequired) return null;
@@ -90,6 +131,10 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
           <StatusChip event={event} />
         </Stack>
         <Stack spacing={1.2}>
+          <Typography variant="body2" color="text.secondary">
+            Maximum bid:{" "}
+            <strong>{formatCurrencyAmount(event?.startingBidAmount)}</strong>
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             Bidding deadline:{" "}
             <strong>
@@ -119,68 +164,103 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
       </Box>
 
       {event?.acceptedBusinessBid ? (
-        <Alert severity="success">
+        <Alert
+          severity="success"
+          action={
+            canOpenAcceptedChat ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => navigate(`/messages/${acceptedConversationId}`)}
+              >
+                Open Chat
+              </Button>
+            ) : null
+          }
+        >
           Accepted bid:{" "}
           <strong>
             {event.acceptedBusinessBid.businessName ||
               event.acceptedBusinessBid.businessOwner?.name ||
               "Business"}
-          </strong>
-          {event.acceptedBusinessBid.businessCategory
-            ? ` (${event.acceptedBusinessBid.businessCategory})`
-            : ""}
+          </strong>{" "}
+          at {formatCurrencyAmount(event.acceptedBusinessBid.bidAmount)}
         </Alert>
       ) : null}
 
-      {canManage ? (
+      {canViewBidHistory ? (
         <Stack spacing={1.5}>
-          <Typography variant="subtitle2" fontWeight={700}>
-            Submitted bids
-          </Typography>
-          {event.businessBids?.length ? (
-            event.businessBids.map((bid) => {
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700}>
+              Bid history
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Lowest bid currently ranks first.
+            </Typography>
+          </Box>
+          {visibleBids.length ? (
+            visibleBids.map((bid) => {
               const bidId = normalizeId(bid._id);
+              const bidOwnerId = normalizeId(bid.businessOwner?.id);
               const isAccepted = bidId === acceptedBidId;
+              const isOwnBid = bidOwnerId === userId;
               return (
                 <Paper
                   key={bidId}
                   variant="outlined"
                   sx={{ p: 2, borderRadius: 2 }}
                 >
-                  <Stack spacing={1}>
+                  <Stack spacing={1.25}>
                     <Stack
                       direction={{ xs: "column", sm: "row" }}
                       spacing={1}
                       justifyContent="space-between"
                       alignItems={{ sm: "center" }}
                     >
-                      <Box>
-                        <Typography fontWeight={700}>
-                          {bid.businessName || bid.businessOwner?.name || "Business"}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {[bid.businessCategory, bid.businessLocation]
-                            .filter(Boolean)
-                            .join(" | ") || "No business details"}
-                        </Typography>
-                        {bid.businessOwner?.email ? (
-                          <Typography variant="body2" color="text.secondary">
-                            {bid.businessOwner.email}
-                          </Typography>
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                        alignItems={{ sm: "center" }}
+                      >
+                        <Chip
+                          size="small"
+                          color={bid.isLeadingBid ? "primary" : "default"}
+                          label={getRankLabel(bid.bidRank)}
+                        />
+                        {isAccepted ? (
+                          <Chip size="small" color="success" label="Accepted" />
                         ) : null}
-                      </Box>
-                      <Chip
-                        size="small"
-                        color={isAccepted ? "success" : "default"}
-                        label={isAccepted ? "Accepted" : bid.status || "Pending"}
-                      />
+                        {isOwnBid ? (
+                          <Chip size="small" variant="outlined" label="Your bid" />
+                        ) : null}
+                      </Stack>
+                      <Typography variant="h6" fontWeight={700}>
+                        {formatCurrencyAmount(bid.bidAmount)}
+                      </Typography>
                     </Stack>
-                    <Typography variant="body2" whiteSpace="pre-wrap">
-                      {bid.proposal}
-                    </Typography>
-                    {bid.pricing ? (
-                      <Typography variant="body2">
-                        <strong>Pricing:</strong> {bid.pricing}
+
+                    <Box>
+                      <Typography fontWeight={700}>
+                        {bid.businessName || bid.businessOwner?.name || "Business"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {[bid.businessCategory, bid.businessLocation]
+                          .filter(Boolean)
+                          .join(" | ") || "No business details"}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Submitted {new Date(bid.createdAt).toLocaleString()}
+                      </Typography>
+                      {bid.businessOwner?.email ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {bid.businessOwner.email}
+                        </Typography>
+                      ) : null}
+                    </Box>
+
+                    {bid.proposal ? (
+                      <Typography variant="body2" whiteSpace="pre-wrap">
+                        <strong>Proposal:</strong> {bid.proposal}
                       </Typography>
                     ) : null}
                     {bid.additionalNotes ? (
@@ -188,10 +268,8 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
                         <strong>Notes:</strong> {bid.additionalNotes}
                       </Typography>
                     ) : null}
-                    <Typography variant="caption" color="text.secondary">
-                      Submitted {new Date(bid.createdAt).toLocaleString()}
-                    </Typography>
-                    {canAcceptAnyBid ? (
+
+                    {canAcceptAnyBid && bid.isLeadingBid ? (
                       <Box>
                         <Button
                           size="small"
@@ -199,12 +277,18 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
                           disabled={isAccepting}
                           onClick={async () => {
                             try {
-                              await acceptBusinessBid({
+                              const result = await acceptBusinessBid({
                                 communityId,
                                 eventId: event._id,
                                 bidId: bid._id,
                               }).unwrap();
                               toast.success("Bid accepted");
+                              const conversationId = normalizeId(
+                                result?.event?.acceptedBusinessConversationId,
+                              );
+                              if (conversationId) {
+                                navigate(`/messages/${conversationId}`);
+                              }
                             } catch (err) {
                               toast.error(
                                 getApiErrorMessage(err, "Failed to accept bid"),
@@ -262,9 +346,21 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
                 />
                 <TextField
                   fullWidth
-                  label="Pricing (optional)"
-                  value={pricing}
-                  onChange={(e) => setPricing(e.target.value)}
+                  type="number"
+                  label="Bid amount"
+                  value={bidAmount}
+                  onChange={(e) => setBidAmount(e.target.value)}
+                  inputProps={{
+                    min: 0,
+                    max: maximumBidAmount ?? undefined,
+                    step: 0.01,
+                  }}
+                  error={bidAmount !== "" && !hasValidBidAmount}
+                  helperText={
+                    maximumBidAmount == null
+                      ? "Enter a bid amount of 0 or more."
+                      : `Must be between ${formatCurrencyAmount(0)} and ${formatCurrencyAmount(maximumBidAmount)}.`
+                  }
                 />
                 <TextField
                   fullWidth
@@ -277,7 +373,11 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
                 <Box>
                   <Button
                     variant="contained"
-                    disabled={isSubmitting || proposal.trim().length < 10}
+                    disabled={
+                      isSubmitting ||
+                      proposal.trim().length < 10 ||
+                      !hasValidBidAmount
+                    }
                     onClick={async () => {
                       try {
                         await submitBusinessBid({
@@ -285,7 +385,7 @@ export default function EventBusinessBiddingSection({ communityId, event }) {
                           eventId: event._id,
                           payload: {
                             proposal: proposal.trim(),
-                            pricing: pricing.trim(),
+                            bidAmount: parsedBidAmount,
                             additionalNotes: additionalNotes.trim(),
                           },
                         }).unwrap();

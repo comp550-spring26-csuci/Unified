@@ -25,6 +25,7 @@ export const api = createApi({
     "Events",
     "Admin",
     "DashboardActivity",
+    "Messages",
   ],
   endpoints: (build) => ({
     // Auth
@@ -320,6 +321,12 @@ export const api = createApi({
           "businessRequirements",
           payload?.businessRequirements || "",
         );
+        if (Number.isFinite(payload?.startingBidAmount)) {
+          formData.append(
+            "startingBidAmount",
+            String(payload.startingBidAmount),
+          );
+        }
         if (payload?.biddingDeadline) {
           formData.append("biddingDeadline", payload.biddingDeadline);
         }
@@ -374,6 +381,12 @@ export const api = createApi({
           "businessRequirements",
           payload?.businessRequirements || "",
         );
+        if (Number.isFinite(payload?.startingBidAmount)) {
+          formData.append(
+            "startingBidAmount",
+            String(payload.startingBidAmount),
+          );
+        }
         if (payload?.biddingDeadline) {
           formData.append("biddingDeadline", payload.biddingDeadline);
         }
@@ -410,13 +423,36 @@ export const api = createApi({
       }),
       invalidatesTags: ["Events", "Posts", "DashboardActivity"],
     }),
+    listConversations: build.query({
+      query: () => "api/me/conversations",
+      providesTags: ["Messages"],
+    }),
+    getConversationMessages: build.query({
+      query: (conversationId) => `api/me/conversations/${conversationId}/messages`,
+      providesTags: (_result, _error, conversationId) => [
+        "Messages",
+        { type: "Messages", id: conversationId },
+      ],
+    }),
+    sendConversationMessage: build.mutation({
+      query: ({ conversationId, text }) => ({
+        url: `api/me/conversations/${conversationId}/messages`,
+        method: "POST",
+        body: { text },
+      }),
+      invalidatesTags: (_result, _error, { conversationId }) => [
+        "Messages",
+        { type: "Messages", id: conversationId },
+        "Events",
+      ],
+    }),
     submitBusinessBid: build.mutation({
       query: ({ communityId, eventId, payload }) => ({
         url: `api/communities/${communityId}/events/${eventId}/bids`,
         method: "POST",
         body: {
           proposal: payload?.proposal || "",
-          pricing: payload?.pricing || "",
+          bidAmount: payload?.bidAmount,
           additionalNotes: payload?.additionalNotes || "",
         },
       }),
@@ -470,6 +506,9 @@ export const {
   useDeleteEventMutation,
   useRsvpMutation,
   useVolunteerMutation,
+  useListConversationsQuery,
+  useGetConversationMessagesQuery,
+  useSendConversationMessageMutation,
   useSubmitBusinessBidMutation,
   useAcceptBusinessBidMutation,
 } = api;
